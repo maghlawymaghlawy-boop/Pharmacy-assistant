@@ -64,9 +64,6 @@
   nav.tabs{
     display:flex;
     overflow-x:auto;
-    gap:6px;
-    padding:10px 10px 0;
-    background:var(--primary);
     position:sticky;
     top:64px;
     z-index:19;
@@ -389,8 +386,8 @@ async function sbDelete(table, id){
 }
 
 /* ---- mapping: DB row (snake_case) <-> app object (camelCase) ---- */
-function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, createdAt:r.created_at }; }
-function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit }; }
+function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, qty:r.quantity, createdAt:r.created_at }; }
+function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit, quantity:o.qty }; }
 
 function mapNewItemRow(r){ return { id:r.id, name:r.name, createdAt:r.created_at }; }
 function buildNewItemRow(o){ return { id:o.id, name:o.name }; }
@@ -549,6 +546,8 @@ function mountStockTab(root){
           </select>
         </div>
       </div>
+      <label>الكمية</label>
+      <input type="number" id="stQty" placeholder="الكمية">
       <button class="btn" id="stAddBtn">إضافة إلى القائمة</button>
     </div>
 
@@ -588,12 +587,14 @@ async function onAddStockIssue(){
   const itemDesc = document.getElementById('stItemDesc').value.trim();
   const type = document.getElementById('stType').value;
   const unit = document.getElementById('stUnit').value;
+  const qty = document.getElementById('stQty').value.trim();
   if(!itemNo || !itemDesc){ showToast('من فضلك ادخل رقم واسم الصنف'); return; }
   try{
-    const inserted = await sbInsert('stock_issues', buildStockRow({ id:uid(), itemNo, itemDesc, type, unit }));
+    const inserted = await sbInsert('stock_issues', buildStockRow({ id:uid(), itemNo, itemDesc, type, unit, qty: qty===''? null : Number(qty) }));
     state.stock.unshift(mapStockRow(inserted));
     document.getElementById('stItemNo').value='';
     document.getElementById('stItemDesc').value='';
+    document.getElementById('stQty').value='';
     renderStockList();
     showToast('تمت الإضافة');
   }catch(e){
@@ -617,7 +618,7 @@ function renderStockList(){
       <div class="top-row">
         <div>
           <div class="title">${esc(it.itemDesc)}</div>
-          <div class="sub">رقم الصنف: ${esc(it.itemNo)} · الوحدة: ${esc(it.unit)}</div>
+          <div class="sub">رقم الصنف: ${esc(it.itemNo)} · الوحدة: ${esc(it.unit)}${(it.qty!==null && it.qty!==undefined && it.qty!=='') ? ' · الكمية: '+esc(it.qty) : ''}</div>
         </div>
         <span class="badge ${it.type==='عجز'?'red':'green'}">${esc(it.type)}</span>
       </div>
