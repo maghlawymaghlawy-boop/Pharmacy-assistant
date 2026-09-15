@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>لوحة تحكم الصيدلية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#0F5C4A;
+    --primary-dark:#0A4436;
+    --primary-light:#E4F0EC;
+    --bg:#F5F4F0;
+    --surface:#FFFFFF;
+    --text:#1F2A27;
+    --muted:#6E7B77;
+    --danger:#B8443A;
+    --danger-light:#FBEAE8;
+    --success:#2E7D5B;
+    --success-light:#E7F5EE;
+    --warning:#B9791E;
+    --warning-light:#FBF1E1;
+    --border:#E4E1D8;
+    --radius:14px;
+    --radius-sm:9px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Cairo',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #app{
+    max-width:560px;
+    margin:0 auto;
+    min-height:100vh;
+    background:var(--bg);
+    display:flex;
+    flex-direction:column;
+  }
+  header.top{
+    background:var(--primary);
+    color:#fff;
+    padding:18px 18px 14px;
+    position:sticky;
+    top:0;
+    z-index:20;
+  }
+  header.top h1{
+    margin:0;
+    font-size:19px;
+    font-weight:800;
+  }
+  header.top p{
+    margin:2px 0 0;
+    font-size:12.5px;
+    opacity:.85;
+    font-weight:500;
+  }
+  nav.tabs{
+    display:flex;
+    overflow-x:auto;
+    gap:6px;
+    padding:10px 10px 0;
+    background:var(--primary);
+    position:sticky;
+    top:64px;
+    z-index:19;
+    scrollbar-width:none;
+  }
+  nav.tabs::-webkit-scrollbar{display:none;}
+  nav.tabs button{
+    flex:0 0 auto;
+    background:rgba(255,255,255,.12);
+    color:#fff;
+    border:none;
+    padding:10px 14px;
+    border-radius:10px 10px 0 0;
+    font-family:'Cairo',sans-serif;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+    opacity:.75;
+  }
+  nav.tabs button.active{
+    background:var(--bg);
+    color:var(--primary-dark);
+    opacity:1;
+  }
+  main{
+    flex:1;
+    padding:16px;
+    padding-bottom:40px;
+  }
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px;
+    margin-bottom:12px;
+  }
+  .section-title{
+    font-size:14px;
+    font-weight:800;
+    color:var(--primary-dark);
+    margin:0 0 10px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .section-title .refresh{
+    font-size:12px;
+    font-weight:600;
+    color:var(--muted);
+    background:none;
+    border:none;
+    cursor:pointer;
+    padding:4px 6px;
+  }
+  label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--muted);
+    margin:10px 0 4px;
+  }
+  label:first-child{margin-top:0;}
+  input[type=text],input[type=tel],input[type=number],input[type=search],select,textarea{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    font-family:'Cairo',sans-serif;
+    font-size:14px;
+    background:#fff;
+    color:var(--text);
+  }
+  input:focus,select:focus,textarea:focus{
+    outline:2px solid var(--primary);
+    outline-offset:1px;
+  }
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;min-width:0;}
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    background:var(--primary);
+    color:#fff;
+    border:none;
+    padding:11px 16px;
+    border-radius:var(--radius-sm);
+    font-family:'Cairo',sans-serif;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    width:100%;
+    margin-top:12px;
+  }
+  .btn.secondary{
+    background:var(--primary-light);
+    color:var(--primary-dark);
+  }
+  .btn.ghost{
+    background:transparent;
+    color:var(--primary-dark);
+    border:1px dashed var(--primary);
+    margin-top:8px;
+  }
+  .btn.danger{background:var(--danger);}
+  .btn.small{width:auto;padding:7px 12px;font-size:12.5px;margin-top:0;}
+  .searchbar{margin-bottom:8px;}
+  .filters{
+    display:flex;
+    gap:8px;
+    margin-bottom:12px;
+    flex-wrap:wrap;
+  }
+  .filters select{flex:1;min-width:120px;font-size:12.5px;padding:8px 10px;}
+  .item-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px 14px;
+    margin-bottom:10px;
+  }
+  .item-card .top-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:8px;
+  }
+  .item-card .title{font-weight:700;font-size:14.5px;}
+  .item-card .sub{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .badge{
+    display:inline-block;
+    font-size:11.5px;
+    font-weight:700;
+    padding:3px 9px;
+    border-radius:20px;
+    white-space:nowrap;
+  }
+  .badge.red{background:var(--danger-light);color:var(--danger);}
+  .badge.green{background:var(--success-light);color:var(--success);}
+  .badge.amber{background:var(--warning-light);color:var(--warning);}
+  .badge.grey{background:var(--primary-light);color:var(--primary-dark);}
+  .check-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px dashed var(--border);
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    user-select:none;
+  }
+  .check-row input{width:18px;height:18px;accent-color:var(--primary);cursor:pointer;}
+  .empty-state{
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    padding:24px 10px;
+  }
+  .draft-row{
+    display:flex;
+    gap:8px;
+    margin-bottom:8px;
+    align-items:center;
+  }
+  .draft-row .rm{
+    flex:0 0 auto;
+    background:var(--danger-light);
+    color:var(--danger);
+    border:none;
+    border-radius:8px;
+    width:34px;height:34px;
+    font-size:16px;
+    cursor:pointer;
+  }
+  .pillnav{
+    display:flex;
+    gap:6px;
+    margin-bottom:14px;
+    background:var(--primary-light);
+    padding:4px;
+    border-radius:12px;
+  }
+  .pillnav button{
+    flex:1;
+    border:none;
+    background:transparent;
+    padding:9px 4px;
+    font-family:'Cairo',sans-serif;
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--primary-dark);
+    border-radius:9px;
+    cursor:pointer;
+  }
+  .pillnav button.active{background:var(--primary);color:#fff;}
+  .stats-grid{
+    display:flex;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .stat-box{
+    flex:1;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px 8px;
+    text-align:center;
+  }
+  .stat-box .num{font-size:20px;font-weight:800;color:var(--primary-dark);}
+  .stat-box .lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;}
+  .contract-toggle{display:flex;gap:8px;}
+  .contract-toggle button{
+    flex:1;
+    padding:10px;
+    border-radius:var(--radius-sm);
+    border:1px solid var(--border);
+    background:#fff;
+    font-family:'Cairo',sans-serif;
+    font-weight:700;
+    font-size:13.5px;
+    cursor:pointer;
+    color:var(--muted);
+  }
+  .contract-toggle button.active{
+    background:var(--primary);
+    border-color:var(--primary);
+    color:#fff;
+  }
+  .modal-overlay{
+    position:fixed;inset:0;
+    background:rgba(15,25,22,.5);
+    display:flex;align-items:center;justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  .modal-box{
+    background:#fff;
+    border-radius:var(--radius);
+    padding:20px;
+    max-width:340px;
+    width:100%;
+    text-align:center;
+  }
+  .modal-box p{font-size:14.5px;font-weight:600;margin:0 0 16px;}
+  .modal-actions{display:flex;gap:10px;}
+  .modal-actions button{flex:1;margin-top:0;}
+  #toast{
+    position:fixed;
+    bottom:18px;
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--primary-dark);
+    color:#fff;
+    padding:10px 18px;
+    border-radius:30px;
+    font-size:13px;
+    font-weight:600;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s;
+    z-index:200;
+    max-width:85%;
+    text-align:center;
+  }
+  #toast.show{opacity:1;}
+  .file-hint{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .archive-note{font-size:12px;color:var(--muted);margin-top:6px;}
+  a.imglink{font-size:12.5px;color:var(--primary-dark);font-weight:700;text-decoration:underline;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <h1>لوحة تحكم الصيدلية</h1>
+    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري</p>
+  </header>
+  <nav class="tabs" id="tabsNav"></nav>
+  <main id="tabContent"></main>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ================= SUPABASE CONFIG ================= */
+const SUPABASE_URL = 'https://bgcttovuwvmrjfufqinv.supabase.co/rest/v1/';
+const SUPABASE_KEY = 'sb_publishable_yy0_ZA7bnwENS6BHO6oaIQ_CMVriKnb';
+
+function sbHeaders(prefer){
+  return {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer '+SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': prefer || 'return=representation'
+  };
+}
+async function sbGet(table, query){
+  const res = await fetch(SUPABASE_URL+table+'?'+(query||'select=*&order=created_at.desc'), { headers: sbHeaders() });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+async function sbInsert(table, row){
+  const res = await fetch(SUPABASE_URL+table, { method:'POST', headers: sbHeaders('return=representation'), body: JSON.stringify(row) });
+  if(!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data[0];
+}
+async function sbUpdate(table, id, patch){
+  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'PATCH', headers: sbHeaders('return=representation'), body: JSON.stringify(patch) });
+  if(!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data[0];
+}
+async function sbDelete(table, id){
+  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
+  if(!res.ok) throw new Error(await res.text());
+  return true;
+}
+
+/* ---- mapping: DB row (snake_case) <-> app object (camelCase) ---- */
+function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, createdAt:r.created_at }; }
+function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit }; }
+
+function mapNewItemRow(r){ return { id:r.id, name:r.name, createdAt:r.created_at }; }
+function buildNewItemRow(o){ return { id:o.id, name:o.name }; }
+
+function mapReservationRow(r){ return { id:r.id, customerName:r.customer_name, phone:r.customer_phone, items:r.items||[], status:r.status, createdAt:r.created_at }; }
+function buildReservationRow(o){ return { id:o.id, customer_name:o.customerName, customer_phone:o.phone, items:o.items, status:o.status }; }
+
+function monthlyItemsPayload(c){
+  return { dueDay:c.dueDay, companyName:c.companyName||'', cardNo:c.cardNo||'', hasCardImage:!!c.hasCardImage, cardImageData:c.cardImageData||null, cycle:c.cycle, list:c.items||[] };
+}
+function mapMonthlyRow(r){
+  const it = r.items || {};
+  return {
+    id:r.id, name:r.customer_name, phone:r.phone,
+    isContract: r.contract_type==='contract',
+    dueDay: it.dueDay || 1,
+    companyName: it.companyName || '',
+    cardNo: it.cardNo || '',
+    hasCardImage: !!it.hasCardImage,
+    cardImageData: it.cardImageData || null,
+    items: it.list || [],
+    cycle: it.cycle || { monthKey: todayInfo().monthKey, contacted:false, dispensed:false },
+    history: r.history || [],
+    createdAt: r.created_at
+  };
+}
+function buildMonthlyRow(o){
+  return {
+    id:o.id, customer_name:o.name, phone:o.phone,
+    contract_type: o.isContract? 'contract':'normal',
+    items: monthlyItemsPayload(o),
+    history: o.history||[]
+  };
+}
+
+/* ---- per-table fetch helpers used across the app ---- */
+async function fetchStockIssues(){ return (await sbGet('stock_issues')).map(mapStockRow); }
+async function fetchNewItems(){ return (await sbGet('new_items')).map(mapNewItemRow); }
+async function fetchReservations(){ return (await sbGet('reservations')).map(mapReservationRow); }
+async function fetchMonthlyCustomers(){ return (await sbGet('monthly_customers')).map(mapMonthlyRow); }
+
+
+/* ================= STATE ================= */
+let state = {
+  stock: [],
+  newItems: [],
+  reservations: [],
+  monthly: [],
+  activeTab: 'stock',
+  monthlySub: 'new',
+  search: { stock:'', newItems:'', reservations:'', archive:'', monthly:'' },
+  filters: { stockType:'all', stockUnit:'all', resStatus:'all', monthlyType:'all' }
+};
+
+/* ================= UTIL ================= */
+function uid(){ return 'id_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
+function esc(s){
+  if(s===undefined||s===null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function todayInfo(){
+  const d = new Date();
+  return { day:d.getDate(), monthKey: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), dateObj:d };
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('ar-EG', {year:'numeric',month:'2-digit',day:'2-digit'});
+}
+
+/* ================= MODAL (يظهر نعم/لا) ================= */
+function askYesNo(message, onYes, onNo){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <p>${esc(message)}</p>
+      <div class="modal-actions">
+        <button class="btn secondary" id="modalNo">لا</button>
+        <button class="btn" id="modalYes">نعم</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#modalYes').onclick = ()=>{ document.body.removeChild(overlay); onYes && onYes(); };
+  overlay.querySelector('#modalNo').onclick = ()=>{ document.body.removeChild(overlay); onNo && onNo(); };
+}
+function showImageModal(dataUrl){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:90%;">
+      <img src="${dataUrl}" style="max-width:100%;border-radius:10px;margin-bottom:14px;">
+      <button class="btn secondary" id="closeImg">إغلاق</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#closeImg').onclick = ()=>document.body.removeChild(overlay);
+  overlay.onclick = (e)=>{ if(e.target===overlay) document.body.removeChild(overlay); };
+}
+
+/* ================= TABS SHELL ================= */
+const TAB_DEFS = [
+  {id:'stock', label:'مشاكل أرصدة الأصناف'},
+  {id:'newItems', label:'أصناف جديدة'},
+  {id:'reservations', label:'حجوزات العملاء'},
+  {id:'monthly', label:'عميل شهري'}
+];
+
+function renderTabsNav(){
+  const nav = document.getElementById('tabsNav');
+  nav.innerHTML = TAB_DEFS.map(t=>`<button data-tab="${t.id}" class="${state.activeTab===t.id?'active':''}">${t.label}</button>`).join('');
+  nav.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{ state.activeTab = b.dataset.tab; renderTabsNav(); renderActiveTab(); };
+  });
+}
+
+function renderActiveTab(){
+  const el = document.getElementById('tabContent');
+  el.innerHTML = '';
+  if(state.activeTab==='stock') mountStockTab(el);
+  else if(state.activeTab==='newItems') mountNewItemsTab(el);
+  else if(state.activeTab==='reservations') mountReservationsTab(el);
+  else if(state.activeTab==='monthly') mountMonthlyTab(el);
+}
+
+/* ============================================================
+   TAB 1: مشاكل أرصدة الأصناف
+   ============================================================ */
+function mountStockTab(root){
+  root.innerHTML = `
+    <div class="card">
+      <p class="section-title">إضافة مشكلة رصيد جديدة</p>
+      <label>رقم الصنف (Item No)</label>
+      <input type="text" id="stItemNo" placeholder="مثال: 10234">
+      <label>اسم / وصف الصنف (Item Description)</label>
+      <input type="text" id="stItemDesc" placeholder="اسم الصنف">
+      <div class="row">
+        <div>
+          <label>نوع المشكلة</label>
+          <select id="stType">
+            <option value="عجز">عجز</option>
+            <option value="زيادة">زيادة</option>
+          </select>
+        </div>
+        <div>
+          <label>الوحدة</label>
+          <select id="stUnit">
+            <option value="علبة">علبة</option>
+            <option value="وحدة">وحدة</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" id="stAddBtn">إضافة إلى القائمة</button>
+    </div>
+
+    <div class="card">
+      <p class="section-title">القائمة الحالية <button class="refresh" id="stRefresh">⟳ تحديث</button></p>
+      <div class="searchbar">
+        <input type="search" id="stSearch" placeholder="ابحث برقم الصنف أو الاسم...">
+      </div>
+      <div class="filters">
+        <select id="stFilterType">
+          <option value="all">كل الأنواع</option>
+          <option value="عجز">عجز فقط</option>
+          <option value="زيادة">زيادة فقط</option>
+        </select>
+        <select id="stFilterUnit">
+          <option value="all">كل الوحدات</option>
+          <option value="علبة">علبة</option>
+          <option value="وحدة">وحدة</option>
+        </select>
+      </div>
+      <div id="stList"></div>
+    </div>
+  `;
+  root.querySelector('#stAddBtn').onclick = onAddStockIssue;
+  root.querySelector('#stSearch').oninput = (e)=>{ state.search.stock = e.target.value; renderStockList(); };
+  root.querySelector('#stFilterType').onchange = (e)=>{ state.filters.stockType = e.target.value; renderStockList(); };
+  root.querySelector('#stFilterUnit').onchange = (e)=>{ state.filters.stockUnit = e.target.value; renderStockList(); };
+  root.querySelector('#stRefresh').onclick = async ()=>{
+    try{ state.stock = await fetchStockIssues(); renderStockList(); showToast('تم التحديث'); }
+    catch(e){ showToast('تعذر الاتصال بالخادم'); }
+  };
+  renderStockList();
+}
+
+async function onAddStockIssue(){
+  const itemNo = document.getElementById('stItemNo').value.trim();
+  const itemDesc = document.getElementById('stItemDesc').value.trim();
+  const type = document.getElementById('stType').value;
+  const unit = document.getElementById('stUnit').value;
+  if(!itemNo || !itemDesc){ showToast('من فضلك ادخل رقم واسم الصنف'); return; }
+  try{
+    const inserted = await sbInsert('stock_issues', buildStockRow({ id:uid(), itemNo, itemDesc, type, unit }));
+    state.stock.unshift(mapStockRow(inserted));
+    document.getElementById('stItemNo').value='';
+    document.getElementById('stItemDesc').value='';
+    renderStockList();
+    showToast('تمت الإضافة');
+  }catch(e){
+    showToast('تعذر الحفظ، تأكد من الاتصال');
+  }
+}
+
+function renderStockList(){
+  const list = document.getElementById('stList');
+  if(!list) return;
+  const q = state.search.stock.trim().toLowerCase();
+  const items = state.stock.filter(it=>{
+    if(state.filters.stockType!=='all' && it.type!==state.filters.stockType) return false;
+    if(state.filters.stockUnit!=='all' && it.unit!==state.filters.stockUnit) return false;
+    if(q && !(it.itemNo.toLowerCase().includes(q) || it.itemDesc.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد مشاكل أرصدة مطابقة حالياً</div>`; return; }
+  list.innerHTML = items.map(it=>`
+    <div class="item-card">
+      <div class="top-row">
+        <div>
+          <div class="title">${esc(it.itemDesc)}</div>
+          <div class="sub">رقم الصنف: ${esc(it.itemNo)} · الوحدة: ${esc(it.unit)}</div>
+        </div>
+        <span class="badge ${it.type==='عجز'?'red':'green'}">${esc(it.type)}</span>
+      </div>
+      <label class="check-row"><input type="checkbox" data-id="${it.id}" class="stDoneChk"> تم تعديل الرصيد</label>
+    </div>
+  `).join('');
+  list.querySelectorAll('.stDoneChk').forEach(chk=>{
+    chk.onclick = async ()=>{
+      const id = chk.dataset.id;
+      try{
+        await sbDelete('stock_issues', id);
+        state.stock = state.stock.filter(x=>x.id!==id);
+        renderStockList();
+        showToast('تم إزالة الصنف من القائمة');
+      }catch(e){
+        chk.checked = false;
+        showToast('تعذر الحذف، تأكد من الاتصال');
+      }
+    };
+  });
+}
+
+/* ============================================================
+   TAB 2: أصناف جديدة
+   ============================================================ */
+function mountNewItemsTab(root){
+  root.innerHTML = `
+    <div class="card">
+      <p class="section-title">إضافة صنف جديد مطلوب توفيره</p>
+      <label>اسم الصنف</label>
+      <input type="text" id="niName" placeholder="اسم الصنف">
+      <button class="btn" id="niAddBtn">إضافة إلى القائمة</button>
+    </div>
+    <div class="card">
+      <p class="section-title">قائمة الأصناف الجديدة <button class="refresh" id="niRefresh">⟳ تحديث</button></p>
+      <div class="searchbar">
+        <input type="search" id="niSearch" placeholder="ابحث باسم الصنف...">
+      </div>
+      <div id="niList"></div>
+    </div>
+  `;
+  root.querySelector('#niAddBtn').onclick = onAddNewItem;
+  root.querySelector('#niSearch').oninput = (e)=>{ state.search.newItems = e.target.value; renderNewItemsList(); };
+  root.querySelector('#niRefresh').onclick = async ()=>{
+    try{ state.newItems = await fetchNewItems(); renderNewItemsList(); showToast('تم التحديث'); }
+    catch(e){ showToast('تعذر الاتصال بالخادم'); }
+  };
+  renderNewItemsList();
+}
+
+async function onAddNewItem(){
+  const name = document.getElementById('niName').value.trim();
+  if(!name){ showToast('من فضلك ادخل اسم الصنف'); return; }
+  try{
+    const inserted = await sbInsert('new_items', buildNewItemRow({ id:uid(), name }));
+    state.newItems.unshift(mapNewItemRow(inserted));
+    document.getElementById('niName').value='';
+    renderNewItemsList();
+    showToast('تمت الإضافة');
+  }catch(e){
+    showToast('تعذر الحفظ، تأكد من الاتصال');
+  }
+}
+
+function renderNewItemsList(){
+  const list = document.getElementById('niList');
+  if(!list) return;
+  const q = state.search.newItems.trim().toLowerCase();
+  const items = state.newItems.filter(it=> !q || it.name.toLowerCase().includes(q));
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد أصناف جديدة مطلوبة حالياً</div>`; return; }
+  list.innerHTML = items.map(it=>`
+    <div class="item-card">
+      <div class="title">${esc(it.name)}</div>
+      <label class="check-row"><input type="checkbox" data-id="${it.id}" class="niDoneChk"> تم توافره</label>
+    </div>
+  `).join('');
+  list.querySelectorAll('.niDoneChk').forEach(chk=>{
+    chk.onclick = async ()=>{
+      const id = chk.dataset.id;
+      try{
+        await sbDelete('new_items', id);
+        state.newItems = state.newItems.filter(x=>x.id!==id);
+        renderNewItemsList();
+        showToast('تم إزالة الصنف من القائمة');
+      }catch(e){
+        chk.checked = false;
+        showToast('تعذر الحذف، تأكد من الاتصال');
+      }
+    };
+  });
+}
+
+/* ============================================================
+   TAB 3: حجوزات العملاء
+   ============================================================ */
+let reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
+
+function mountReservationsTab(root){
+  reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
+  root.innerHTML = `
+    <div class="card">
+      <p class="section-title">تسجيل حجز جديد</p>
+      <label>اسم العميل</label>
+      <input type="text" id="resName" placeholder="اسم العميل">
+      <label>رقم الموبايل</label>
+      <input type="tel" id="resPhone" placeholder="رقم الموبايل">
+      <label>الأصناف المحجوزة</label>
+      <div id="resItemsWrap"></div>
+      <button class="btn ghost" id="resAddRow">+ إضافة صنف آخر</button>
+      <button class="btn" id="resSaveBtn">حفظ الحجز</button>
+    </div>
+
+    <div class="card">
+      <p class="section-title">الحجوزات النشطة <button class="refresh" id="resRefresh">⟳ تحديث</button></p>
+      <div class="searchbar">
+        <input type="search" id="resSearch" placeholder="ابحث باسم العميل، الموبايل، أو الصنف...">
+      </div>
+      <div class="filters">
+        <select id="resFilterStatus">
+          <option value="all">كل حالات التواصل</option>
+          <option value="تم الرد">تم الرد</option>
+          <option value="لم يتم التواصل">لم يتم التواصل</option>
+          <option value="تم الالغاء">تم الالغاء</option>
+        </select>
+      </div>
+      <div id="resList"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">أرشيف الحجوزات السابقة <button class="refresh" id="arcRefresh">⟳ تحديث</button></p>
+      <div class="searchbar">
+        <input type="search" id="arcSearch" placeholder="ابحث في الأرشيف...">
+      </div>
+      <div id="arcList"></div>
+    </div>
+  `;
+  renderResDraftRows();
+  root.querySelector('#resAddRow').onclick = ()=>{ reservationDraftItems.push({itemNo:'',itemDesc:'',qty:'',branch:''}); renderResDraftRows(); };
+  root.querySelector('#resSaveBtn').onclick = onSaveReservation;
+  root.querySelector('#resSearch').oninput = (e)=>{ state.search.reservations = e.target.value; renderReservationsList(); };
+  root.querySelector('#resFilterStatus').onchange = (e)=>{ state.filters.resStatus = e.target.value; renderReservationsList(); };
+  root.querySelector('#resRefresh').onclick = async ()=>{
+    try{ state.reservations = await fetchReservations(); renderReservationsList(); renderArchiveList(); showToast('تم التحديث'); }
+    catch(e){ showToast('تعذر الاتصال بالخادم'); }
+  };
+  root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
+  root.querySelector('#arcRefresh').onclick = async ()=>{
+    try{ state.reservations = await fetchReservations(); renderReservationsList(); renderArchiveList(); showToast('تم التحديث'); }
+    catch(e){ showToast('تعذر الاتصال بالخادم'); }
+  };
+  renderReservationsList();
+  renderArchiveList();
+}
+
+function renderResDraftRows(){
+  const wrap = document.getElementById('resItemsWrap');
+  wrap.innerHTML = reservationDraftItems.map((row,i)=>`
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin-bottom:8px;">
+      <div class="draft-row" style="margin-bottom:6px;">
+        <input type="text" placeholder="رقم الصنف" value="${esc(row.itemNo)}" data-i="${i}" data-f="itemNo" class="draftInput">
+        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="itemDesc" class="draftInput">
+        <input type="number" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="draftInput" style="max-width:70px;">
+        ${reservationDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
+      </div>
+      <input type="text" placeholder="اسم الفرع اللي هيجي منه الصنف" value="${esc(row.branch)}" data-i="${i}" data-f="branch" class="draftInput">
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.draftInput').forEach(inp=>{
+    inp.oninput = ()=>{ reservationDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
+  });
+  wrap.querySelectorAll('.rm').forEach(btn=>{
+    btn.onclick = ()=>{ reservationDraftItems.splice(Number(btn.dataset.i),1); renderResDraftRows(); };
+  });
+}
+
+async function onSaveReservation(){
+  const name = document.getElementById('resName').value.trim();
+  const phone = document.getElementById('resPhone').value.trim();
+  const items = reservationDraftItems.filter(r=>r.itemNo.trim() || r.itemDesc.trim()).map(r=>({
+    itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:r.qty||'', branch:(r.branch||'').trim(), received:null, resolvedAt:null
+  }));
+  if(!name || !phone){ showToast('من فضلك ادخل اسم العميل ورقم الموبايل'); return; }
+  if(items.length===0){ showToast('من فضلك ادخل صنف واحد على الأقل'); return; }
+  try{
+    const inserted = await sbInsert('reservations', buildReservationRow({
+      id:uid(), customerName:name, phone, items, status:'لم يتم التواصل'
+    }));
+    state.reservations.unshift(mapReservationRow(inserted));
+    document.getElementById('resName').value='';
+    document.getElementById('resPhone').value='';
+    reservationDraftItems = [{itemNo:'',itemDesc:'',qty:'',branch:''}];
+    renderResDraftRows();
+    renderReservationsList();
+    showToast('تم حفظ الحجز');
+  }catch(e){
+    showToast('تعذر الحفظ، تأكد من الاتصال');
+  }
+}
+
+function renderReservationsList(){
+  const list = document.getElementById('resList');
+  if(!list) return;
+  const q = state.search.reservations.trim().toLowerCase();
+  const filtered = state.reservations.filter(r=>{
+    const unresolved = r.items.filter(it=>it.received===null);
+    if(unresolved.length===0) return false;
+    if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
+    if(!q) return true;
+    const inCustomer = r.customerName.toLowerCase().includes(q) || r.phone.includes(q);
+    const inItems = unresolved.some(it=>it.itemNo.toLowerCase().includes(q) || it.itemDesc.toLowerCase().includes(q) || (it.branch||'').toLowerCase().includes(q));
+    return inCustomer || inItems;
+  });
+  if(filtered.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات نشطة مطابقة</div>`; return; }
+
+  const statusBadge = s => s==='تم الرد' ? 'green' : (s==='تم الالغاء' ? 'red' : 'amber');
+
+  list.innerHTML = filtered.map(r=>`
+    <div class="item-card">
+      <div class="top-row">
+        <div>
+          <div class="title">${esc(r.customerName)}</div>
+          <div class="sub">${esc(r.phone)} · ${fmtDate(r.createdAt)}</div>
+        </div>
+        <span class="badge ${statusBadge(r.status)}">${esc(r.status)}</span>
+      </div>
+      <select data-id="${r.id}" class="resStatusSel" style="margin-top:10px;">
+        <option value="تم الرد" ${r.status==='تم الرد'?'selected':''}>تم الرد</option>
+        <option value="لم يتم التواصل" ${r.status==='لم يتم التواصل'?'selected':''}>لم يتم التواصل</option>
+        <option value="تم الالغاء" ${r.status==='تم الالغاء'?'selected':''}>تم الالغاء</option>
+      </select>
+      ${r.items.map((it,idx)=>({it,idx})).filter(x=>x.it.received===null).map(({it,idx})=>`
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);">
+          <div class="sub"><b>${esc(it.itemDesc)}</b> (${esc(it.itemNo)}) — الكمية: ${esc(it.qty)}</div>
+          ${it.branch ? `<div class="sub">الفرع: ${esc(it.branch)}</div>` : ''}
+          <label class="check-row" style="border:none;padding-top:6px;margin-top:6px;">
+            <input type="checkbox" class="resRecvChk" data-rid="${r.id}" data-idx="${idx}"> تم استلام الصنف
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.resStatusSel').forEach(sel=>{
+    sel.onchange = async ()=>{
+      const r = state.reservations.find(x=>x.id===sel.dataset.id);
+      if(!r) return;
+      const prev = r.status;
+      r.status = sel.value;
+      try{ await sbUpdate('reservations', r.id, { status:r.status }); renderReservationsList(); }
+      catch(e){ r.status = prev; sel.value = prev; showToast('تعذر الحفظ، تأكد من الاتصال'); }
+    };
+  });
+
+  list.querySelectorAll('.resRecvChk').forEach(chk=>{
+    chk.onclick = ()=>{
+      chk.checked = false; // controlled via modal
+      const rid = chk.dataset.rid, idx = Number(chk.dataset.idx);
+      askYesNo('هل تم استلام العميل للصنف؟', 
+        ()=>resolveReservationItem(rid, idx, true),
+        ()=>resolveReservationItem(rid, idx, false)
+      );
+    };
+  });
+}
+
+async function resolveReservationItem(rid, idx, received){
+  const r = state.reservations.find(x=>x.id===rid);
+  if(!r) return;
+  const item = r.items[idx];
+  if(!item) return;
+  const prevReceived = item.received, prevResolvedAt = item.resolvedAt;
+  item.received = received;
+  item.resolvedAt = new Date().toISOString();
+  try{
+    await sbUpdate('reservations', rid, { items:r.items });
+    renderReservationsList();
+    renderArchiveList();
+    showToast(received? 'تم تسجيل استلام الصنف' : 'تم تسجيل عدم الاستلام');
+  }catch(e){
+    item.received = prevReceived;
+    item.resolvedAt = prevResolvedAt;
+    showToast('تعذر الحفظ، تأكد من الاتصال');
+  }
+}
+
+function renderArchiveList(){
+  const list = document.getElementById('arcList');
+  if(!list) return;
+  const q = state.search.archive.trim().toLowerCase();
+  const flat = [];
+  state.reservations.forEach(r=>{
+    r.items.forEach(it=>{
+      if(it.received!==null){
+        flat.push({ customerName:r.customerName, phone:r.phone, itemNo:it.itemNo, itemDesc:it.itemDesc, qty:it.qty, branch:it.branch||'', status:r.status, received:it.received, resolvedAt:it.resolvedAt });
+      }
+    });
+  });
+  flat.sort((a,b)=> new Date(b.resolvedAt||0) - new Date(a.resolvedAt||0));
+  const items = flat.filter(it=>{
+    if(!q) return true;
+    return it.customerName.toLowerCase().includes(q) || it.phone.includes(q) ||
+      it.itemNo.toLowerCase().includes(q) || it.itemDesc.toLowerCase().includes(q) ||
+      (it.branch||'').toLowerCase().includes(q);
+  });
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا يوجد سجل أرشيف مطابق</div>`; return; }
+  list.innerHTML = items.map(it=>`
+    <div class="item-card">
+      <div class="top-row">
+        <div>
+          <div class="title">${esc(it.customerName)}</div>
+          <div class="sub">${esc(it.itemDesc)} (${esc(it.itemNo)}) · الكمية: ${esc(it.qty)}${it.branch? ' · الفرع: '+esc(it.branch) : ''}</div>
+        </div>
+        <span class="badge ${it.received?'green':'red'}">${it.received? 'تم الاستلام':'لم يتم الاستلام'}</span>
+      </div>
+      <div class="archive-note">${esc(it.phone)} · حالة التواصل: ${esc(it.status)} · ${fmtDate(it.resolvedAt)}</div>
+    </div>
+  `).join('');
+}
+
+/* ============================================================
+   TAB 4: عميل شهري
+   ============================================================ */
+let monthlyDraftItems = [{name:'', qty:''}];
+let monthlyIsContract = false;
+
+function mountMonthlyTab(root){
+  root.innerHTML = `
+    <div class="pillnav" id="monthlyPills">
+      <button data-sub="new" class="${state.monthlySub==='new'?'active':''}">تسجيل عميل جديد</button>
+      <button data-sub="today" class="${state.monthlySub==='today'?'active':''}">عملاء اليوم</button>
+      <button data-sub="list" class="${state.monthlySub==='list'?'active':''}">قائمة العملاء</button>
+    </div>
+    <div id="monthlyBody"></div>
+  `;
+  root.querySelectorAll('#monthlyPills button').forEach(b=>{
+    b.onclick = ()=>{ state.monthlySub = b.dataset.sub; mountMonthlyTab(root); };
+  });
+  const body = document.getElementById('monthlyBody');
+  if(state.monthlySub==='new') renderMonthlyNewForm(body);
+  else if(state.monthlySub==='today') renderMonthlyToday(body);
+  else renderMonthlyCustomersList(body);
+}
+
+function renderMonthlyNewForm(body){
+  monthlyDraftItems = [{name:'', qty:''}];
+  monthlyIsContract = false;
+  const dayOptions = Array.from({length:31},(_,i)=>i+1).map(d=>`<option value="${d}">${d}</option>`).join('');
+  body.innerHTML = `
+    <div class="card">
+      <p class="section-title">بيانات العميل</p>
+      <label>اسم العميل</label>
+      <input type="text" id="mcName" placeholder="اسم العميل">
+      <label>رقم الموبايل</label>
+      <input type="tel" id="mcPhone" placeholder="رقم الموبايل">
+      <label>هل العميل تعاقد؟</label>
+      <div class="contract-toggle">
+        <button type="button" id="mcYes">نعم، عميل تعاقد</button>
+        <button type="button" id="mcNo" class="active">لا</button>
+      </div>
+      <div id="mcContractFields" style="display:none;">
+        <label>اسم الشركة</label>
+        <input type="text" id="mcCompany" placeholder="اسم شركة التعاقد">
+        <label>رقم الكارنيه</label>
+        <input type="text" id="mcCardNo" placeholder="رقم الكارنيه">
+        <label>صورة الكارنيه (اختياري)</label>
+        <input type="file" id="mcCardImg" accept="image/*">
+        <div class="file-hint">يفضل صورة بحجم صغير لسرعة الحفظ</div>
+      </div>
+      <div id="mcNonContractFields">
+        <label>الأصناف المطلوبة</label>
+        <div id="mcItemsWrap"></div>
+        <button class="btn ghost" id="mcAddRow">+ إضافة صنف آخر</button>
+      </div>
+      <label>${monthlyIsContract? 'موعد الصرف (اليوم من كل شهر)' : 'الموعد المطلوب (اليوم من كل شهر)'}</label>
+      <select id="mcDay">${dayOptions}</select>
+      <button class="btn" id="mcSaveBtn">تسجيل العميل</button>
+    </div>
+  `;
+  renderMonthlyDraftRows();
+  document.getElementById('mcAddRow').onclick = ()=>{ monthlyDraftItems.push({name:'',qty:''}); renderMonthlyDraftRows(); };
+  document.getElementById('mcYes').onclick = ()=>setMonthlyContractMode(true);
+  document.getElementById('mcNo').onclick = ()=>setMonthlyContractMode(false);
+  document.getElementById('mcSaveBtn').onclick = onSaveMonthlyCustomer;
+}
+
+function setMonthlyContractMode(isContract){
+  monthlyIsContract = isContract;
+  document.getElementById('mcYes').classList.toggle('active', isContract);
+  document.getElementById('mcNo').classList.toggle('active', !isContract);
+  document.getElementById('mcContractFields').style.display = isContract? 'block':'none';
+  document.getElementById('mcNonContractFields').style.display = isContract? 'none':'block';
+  const lbl = document.querySelector('#mcDay').previousElementSibling;
+  lbl.textContent = isContract? 'موعد الصرف (اليوم من كل شهر)' : 'الموعد المطلوب (اليوم من كل شهر)';
+}
+
+function renderMonthlyDraftRows(){
+  const wrap = document.getElementById('mcItemsWrap');
+  wrap.innerHTML = monthlyDraftItems.map((row,i)=>`
+    <div class="draft-row">
+      <input type="text" placeholder="اسم الصنف" value="${esc(row.name)}" data-i="${i}" data-f="name" class="mDraftInput">
+      <input type="number" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="mDraftInput" style="max-width:80px;">
+      ${monthlyDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
+    </div>
+  `).join('');
+  wrap.querySelectorAll('.mDraftInput').forEach(inp=>{
+    inp.oninput = ()=>{ monthlyDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
+  });
+  wrap.querySelectorAll('.rm').forEach(btn=>{
+    btn.onclick = ()=>{ monthlyDraftItems.splice(Number(btn.dataset.i),1); renderMonthlyDraftRows(); };
+  });
+}
+
+async function onSaveMonthlyCustomer(){
+  const name = document.getElementById('mcName').value.trim();
+  const phone = document.getElementById('mcPhone').value.trim();
+  const dueDay = Number(document.getElementById('mcDay').value);
+  if(!name || !phone){ showToast('من فضلك ادخل اسم العميل ورقم الموبايل'); return; }
+
+  const customer = {
+    id: uid(), name, phone, isContract: monthlyIsContract, dueDay,
+    cycle: { monthKey: todayInfo().monthKey, contacted:false, dispensed:false },
+    history: []
+  };
+
+  if(monthlyIsContract){
+    customer.companyName = document.getElementById('mcCompany').value.trim();
+    customer.cardNo = document.getElementById('mcCardNo').value.trim();
+    customer.items = [];
+    const fileInput = document.getElementById('mcCardImg');
+    if(fileInput.files && fileInput.files[0]){
+      customer.cardImageData = await fileToDataUrl(fileInput.files[0]);
+      customer.hasCardImage = true;
+    }
+  } else {
+    const items = monthlyDraftItems.filter(r=>r.name.trim()).map(r=>({name:r.name.trim(), qty:r.qty||''}));
+    if(items.length===0){ showToast('من فضلك ادخل صنف واحد على الأقل'); return; }
+    customer.items = items;
+  }
+
+  try{
+    const inserted = await sbInsert('monthly_customers', buildMonthlyRow(customer));
+    state.monthly.unshift(mapMonthlyRow(inserted));
+    showToast('تم تسجيل العميل بنجاح');
+    state.monthlySub = 'list';
+    mountMonthlyTab(document.getElementById('tabContent'));
+  }catch(e){
+    showToast('تعذر الحفظ، تأكد من الاتصال');
+  }
+}
+
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result);
+    r.onerror = ()=>reject(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+function ensureCycleFresh(customer){
+  const info = todayInfo();
+  if(!customer.cycle || customer.cycle.monthKey !== info.monthKey){
+    if(customer.cycle){
+      customer.history = customer.history || [];
+      customer.history.push(customer.cycle);
+    }
+    customer.cycle = { monthKey: info.monthKey, contacted:false, dispensed:false };
+    return true;
+  }
+  return false;
+}
+
+async function renderMonthlyToday(body){
+  const info = todayInfo();
+  const changedCustomers = state.monthly.filter(c=>ensureCycleFresh(c));
+  if(changedCustomers.length){
+    for(const c of changedCustomers){
+      try{ await sbUpdate('monthly_customers', c.id, { items: monthlyItemsPayload(c), history: c.history }); }
+      catch(e){ /* will retry silently on next load */ }
+    }
+  }
+
+  const dispensedCount = state.monthly.filter(c=>c.cycle.monthKey===info.monthKey && c.cycle.dispensed).length;
+  const totalCount = state.monthly.length;
+  const notDispensedCount = totalCount - dispensedCount;
+
+  const dueToday = state.monthly.filter(c=>c.dueDay===info.day);
+
+  body.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-box"><div class="num">${totalCount}</div><div class="lbl">إجمالي العملاء</div></div>
+      <div class="stat-box"><div class="num">${dispensedCount}</div><div class="lbl">تلقوا العلاج هذا الشهر</div></div>
+      <div class="stat-box"><div class="num">${notDispensedCount}</div><div class="lbl">لم يتلقوا العلاج بعد</div></div>
+    </div>
+    <div class="card">
+      <p class="section-title">عملاء اليوم (يوم ${info.day} من الشهر)</p>
+      <div id="todayList"></div>
+    </div>
+  `;
+  const list = document.getElementById('todayList');
+  if(dueToday.length===0){ list.innerHTML = `<div class="empty-state">لا يوجد عملاء مستحقون اليوم</div>`; return; }
+  list.innerHTML = dueToday.map(c=>`
+    <div class="item-card">
+      <div class="top-row">
+        <div>
+          <div class="title">${esc(c.name)}</div>
+          <div class="sub">${esc(c.phone)} · ${c.isContract? 'عميل تعاقد ('+esc(c.companyName||'')+')' : 'غير تعاقد'}</div>
+        </div>
+        <span class="badge grey">${c.isContract? 'تعاقد':'غير تعاقد'}</span>
+      </div>
+      ${!c.isContract && c.items && c.items.length ? `<div class="sub" style="margin-top:6px;">الأصناف: ${c.items.map(it=>esc(it.name)+' ('+esc(it.qty)+')').join('، ')}</div>` : ''}
+      <label class="check-row"><input type="checkbox" class="todayContactChk" data-id="${c.id}" ${c.cycle.contacted?'checked':''}> تم التواصل مع العميل</label>
+      <label class="check-row"><input type="checkbox" class="todayDispenseChk" data-id="${c.id}" ${c.cycle.dispensed?'checked':''}> تم الصرف</label>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.todayContactChk').forEach(chk=>{
+    chk.onchange = async ()=>{
+      const c = state.monthly.find(x=>x.id===chk.dataset.id);
+      if(!c) return;
+      const prev = c.cycle.contacted;
+      c.cycle.contacted = chk.checked;
+      try{ await sbUpdate('monthly_customers', c.id, { items: monthlyItemsPayload(c) }); }
+      catch(e){ c.cycle.contacted = prev; chk.checked = prev; showToast('تعذر الحفظ، تأكد من الاتصال'); }
+    };
+  });
+  list.querySelectorAll('.todayDispenseChk').forEach(chk=>{
+    chk.onchange = async ()=>{
+      const c = state.monthly.find(x=>x.id===chk.dataset.id);
+      if(!c) return;
+      const prev = c.cycle.dispensed;
+      c.cycle.dispensed = chk.checked;
+      try{ await sbUpdate('monthly_customers', c.id, { items: monthlyItemsPayload(c) }); renderMonthlyToday(document.getElementById('monthlyBody')); }
+      catch(e){ c.cycle.dispensed = prev; chk.checked = prev; showToast('تعذر الحفظ، تأكد من الاتصال'); }
+    };
+  });
+}
+
+function renderMonthlyCustomersList(body){
+  body.innerHTML = `
+    <div class="card">
+      <p class="section-title">جميع العملاء <button class="refresh" id="mcRefresh">⟳ تحديث</button></p>
+      <div class="searchbar">
+        <input type="search" id="mcSearchAll" placeholder="ابحث بالاسم أو رقم الموبايل...">
+      </div>
+      <div class="filters">
+        <select id="mcFilterType">
+          <option value="all">كل الأنواع</option>
+          <option value="contract">عملاء تعاقد</option>
+          <option value="normal">غير تعاقد</option>
+        </select>
+      </div>
+      <div id="mcAllList"></div>
+    </div>
+  `;
+  document.getElementById('mcSearchAll').oninput = (e)=>{ state.search.monthly = e.target.value; renderMonthlyAllListInner(); };
+  document.getElementById('mcFilterType').onchange = (e)=>{ state.filters.monthlyType = e.target.value; renderMonthlyAllListInner(); };
+  document.getElementById('mcRefresh').onclick = async ()=>{
+    try{ state.monthly = await fetchMonthlyCustomers(); renderMonthlyAllListInner(); showToast('تم التحديث'); }
+    catch(e){ showToast('تعذر الاتصال بالخادم'); }
+  };
+  renderMonthlyAllListInner();
+}
+
+function renderMonthlyAllListInner(){
+  const list = document.getElementById('mcAllList');
+  if(!list) return;
+  const q = state.search.monthly.trim().toLowerCase();
+  const items = state.monthly.filter(c=>{
+    if(state.filters.monthlyType==='contract' && !c.isContract) return false;
+    if(state.filters.monthlyType==='normal' && c.isContract) return false;
+    if(q && !(c.name.toLowerCase().includes(q) || c.phone.includes(q))) return false;
+    return true;
+  });
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا يوجد عملاء مطابقون</div>`; return; }
+  list.innerHTML = items.map(c=>`
+    <div class="item-card">
+      <div class="top-row">
+        <div>
+          <div class="title">${esc(c.name)}</div>
+          <div class="sub">${esc(c.phone)} · موعد كل شهر: يوم ${c.dueDay}</div>
+        </div>
+        <span class="badge grey">${c.isContract? 'تعاقد':'غير تعاقد'}</span>
+      </div>
+      ${c.isContract ? `<div class="sub" style="margin-top:6px;">${esc(c.companyName||'')} · كارنيه: ${esc(c.cardNo||'')} ${c.hasCardImage? '<span class="imglink" data-id="'+c.id+'">عرض صورة الكارنيه</span>' : ''}</div>` : ''}
+      ${!c.isContract && c.items ? `<div class="sub" style="margin-top:6px;">الأصناف: ${c.items.map(it=>esc(it.name)+' ('+esc(it.qty)+')').join('، ')}</div>` : ''}
+      <button class="btn danger small mcDeleteBtn" style="margin-top:10px;" data-id="${c.id}">حذف العميل</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.imglink').forEach(a=>{
+    a.onclick = ()=>{
+      const c = state.monthly.find(x=>x.id===a.dataset.id);
+      if(c && c.cardImageData) showImageModal(c.cardImageData); else showToast('لا توجد صورة محفوظة');
+    };
+  });
+  list.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.onclick = ()=>{
+      askYesNo('هل تريد حذف هذا العميل نهائياً؟', async ()=>{
+        try{
+          await sbDelete('monthly_customers', btn.dataset.id);
+          state.monthly = state.monthly.filter(x=>x.id!==btn.dataset.id);
+          renderMonthlyAllListInner();
+          showToast('تم حذف العميل');
+        }catch(e){
+          showToast('تعذر الحذف، تأكد من الاتصال');
+        }
+      });
+    };
+  });
+}
+
+/* ================= INIT ================= */
+async function init(){
+  try{
+    const [stock, newItems, reservations, monthly] = await Promise.all([
+      fetchStockIssues(),
+      fetchNewItems(),
+      fetchReservations(),
+      fetchMonthlyCustomers()
+    ]);
+    state.stock = stock;
+    state.newItems = newItems;
+    state.reservations = reservations;
+    state.monthly = monthly;
+  }catch(e){
+    console.error('init load failed', e);
+    showToast('تعذر تحميل البيانات من الخادم، تأكد من الاتصال بالإنترنت');
+  }
+  renderTabsNav();
+  renderActiveTab();
+}
+init();
+</script>
+</body>
+</html>
