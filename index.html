@@ -262,14 +262,10 @@ async function sbUpdate(table, id, patch){
   return data[0];
 }
 async function sbDelete(table, id){
-  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { 
-    method:'DELETE', 
-    headers: sbHeaders('return=minimal') 
-  });
-  if(!res.ok) throw new Error('Delete failed');
+  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
+  if(!res.ok) throw new Error(await res.text());
   return true;
-}
-  
+  }
   function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, qty:r.quantity, staffCode:r.staff_code||'', createdAt:r.created_at }; }
 function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit, quantity:o.qty, staff_code:o.staffCode }; }
 
@@ -367,8 +363,7 @@ function openEditModal(title, htmlContent, onSave){
     const success = await onSave(overlay);
     if(success!==false) document.body.removeChild(overlay);
   };
-}
-  const TAB_DEFS = [
+}const TAB_DEFS = [
   {id:'stock', label:'مشاكل أرصدة الأصناف'},
   {id:'newItems', label:'أصناف جديدة'},
   {id:'reservations', label:'حجوزات العملاء'},
@@ -530,8 +525,7 @@ function renderStockList(){
       catch(e){ chk.checked = false; showToast('تعذر الحذف'); }
     };
   });
-}
-  /* TAB 2: أصناف جديدة */
+}/* TAB 2: أصناف جديدة */
 function mountNewItemsTab(root){
   root.innerHTML = `
     <div class="card">
@@ -1072,22 +1066,24 @@ function renderMonthlyAllListInner(){
           Object.assign(c, patch); renderMonthlyAllListInner(); showToast('تم التعديل بنجاح'); return true;
         }catch(e){ showToast('تعذر الحفظ'); return false; }
       });
-    list.querySelectorAll('.mcDeleteBtn').forEach(btn => {
-  btn.onclick = () => {
-    const id = btn.getAttribute('data-id') || btn.dataset.id;
-    askYesNo('هل تريد حذف هذا العميل نهائياً؟', async () => {
-      try {
-        await sbDelete('monthly_customers', id);
-        state.monthly = state.monthly.filter(x => x.id != id);
-        renderMonthlyAllListInner();
-        showToast('تم حذف العميل');
-      } catch(e) {
-        showToast('تعذر الحذف');
-      }
-    });
-  };
-});
-      
+    };
+  });
+
+  list.querySelectorAll('.mcDeleteBtn').forEach(btn=>{
+    btn.onclick = ()=>{
+      askYesNo('هل تريد حذف هذا العميل نهائياً؟', async ()=>{
+        try{
+          await sbDelete('monthly_customers', btn.dataset.id);
+          state.monthly = state.monthly.filter(x=>x.id!==btn.dataset.id);
+          renderMonthly
+  
+  AllListInner(); showToast('تم حذف العميل');
+        }catch(e){ showToast('تعذر الحذف'); }
+      });
+    };
+  });
+}
+
 async function init(){
   try{
     const [stock, newItems, reservations, monthly] = await Promise.all([
