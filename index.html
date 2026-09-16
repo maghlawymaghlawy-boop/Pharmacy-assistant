@@ -262,10 +262,14 @@ async function sbUpdate(table, id, patch){
   return data[0];
 }
 async function sbDelete(table, id){
-  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
-  if(!res.ok) throw new Error(await res.text());
+  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { 
+    method:'DELETE', 
+    headers: sbHeaders('return=minimal') 
+  });
+  if(!res.ok) throw new Error('Delete failed');
   return true;
-  }
+}
+  
   function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, qty:r.quantity, staffCode:r.staff_code||'', createdAt:r.created_at }; }
 function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit, quantity:o.qty, staff_code:o.staffCode }; }
 
