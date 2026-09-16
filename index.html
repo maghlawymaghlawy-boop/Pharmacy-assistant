@@ -1074,20 +1074,23 @@ function renderMonthlyAllListInner(){
       });
     };
   });
-
-  list.querySelectorAll('.mcDeleteBtn').forEach(btn=>{
-    btn.onclick = ()=>{
-      askYesNo('هل تريد حذف هذا العميل نهائياً؟', async ()=>{
-        try{
-          await sbDelete('monthly_customers', btn.dataset.id);
-          state.monthly = state.monthly.filter(x=>x.id!==btn.dataset.id);
-          renderMonthly
-         AllListInner(); showToast('تم حذف العميل');
-        }catch(e){ showToast('تعذر الحذف'); }
-      });
-    };
-  });
-}
+list.querySelectorAll('.mcDeleteBtn').forEach(btn => {
+  btn.onclick = () => {
+    const id = btn.getAttribute('data-id') || btn.dataset.id;
+    askYesNo('هل تريد حذف هذا العميل نهائياً؟', async () => {
+      try {
+        await sbDelete('monthly_customers', id);
+        state.monthly = state.monthly.filter(x => x.id != id);
+        renderMonthlyAllListInner();
+        showToast('تم حذف العميل');
+      } catch(e) {
+        showToast('تعذر الحذف');
+      }
+    });
+  };
+});
+  
+  
 
 async function init(){
   try{
