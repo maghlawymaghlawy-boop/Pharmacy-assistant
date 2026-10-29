@@ -212,7 +212,6 @@
   }
   #toast.show{opacity:1;}
   .staff-tag{font-size:11.5px;font-weight:700;color:var(--primary);background:var(--primary-light);padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block;}
-  .note-box{font-size:12.5px;color:var(--warning);background:var(--warning-light);padding:4px 8px;border-radius:6px;margin-top:6px;}
 </style>
 </head>
 <body>
@@ -265,8 +264,8 @@ async function sbDelete(table, id){
 function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, qty:r.quantity, staffCode:r.staff_code||'', createdAt:r.created_at }; }
 function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit, quantity:o.qty, staff_code:o.staffCode }; }
 
-function mapReservationRow(r){ return { id:r.id, customerName:r.customer_name, phone:r.customer_phone, items:r.items||[], note:r.note||'', status:r.status, staffCode:r.staff_code||'', createdAt:r.created_at }; }
-function buildReservationRow(o){ return { id:o.id, customer_name:o.customerName, customer_phone:o.phone, items:o.items, note:o.note, status:o.status, staff_code:o.staffCode }; }
+function mapReservationRow(r){ return { id:r.id, customerName:r.customer_name, phone:r.customer_phone, items:r.items||[], status:r.status, staffCode:r.staff_code||'', createdAt:r.created_at }; }
+function buildReservationRow(o){ return { id:o.id, customer_name:o.customerName, customer_phone:o.phone, items:o.items, status:o.status, staff_code:o.staffCode }; }
 
 function monthlyItemsPayload(c){
   return { dueDay:c.dueDay, companyName:c.companyName||'', cardNo:c.cardNo||'', hasCardImage:!!c.hasCardImage, cardImageData:c.cardImageData||null, cycle:c.cycle, list:c.items||[] };
@@ -518,9 +517,6 @@ function mountReservationsTab(root){
       <label>الأصناف المحجوزة</label>
       <div id="resItemsWrap"></div>
       <button class="btn ghost" id="resAddRow">+ إضافة صنف آخر</button>
-      
-      <label>ملاحظة الحجز</label>
-      <textarea id="resNote" placeholder="اكتب أي ملاحظات إضافية تخص الحجز..." rows="2"></textarea>
 
       <label>كود الزميل (القائم بالإدخال) *</label>
       <input type="text" id="resStaffCode" placeholder="أدخل كودك الوظيفي">
@@ -561,7 +557,6 @@ function mountReservationsTab(root){
     const data = state.reservations.map((r, idx)=>({
       'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة التواصل': r.status,
       'الأدوية المحجوزة': r.items.map(it=>`${it.itemDesc} (${it.itemNo}) - كمية: ${it.qty} - فرع: ${it.branch||'مباشر'}`).join(' | '),
-      'ملاحظات الحجز': r.note || '',
       'كود الزميل': r.staffCode, 'التاريخ': fmtDate(r.createdAt)
     }));
     exportToExcel('حجوزات_العملاء', data);
@@ -594,7 +589,6 @@ function renderResDraftRows(){
 async function onSaveReservation(){
   const name = document.getElementById('resName').value.trim();
   const phone = document.getElementById('resPhone').value.trim();
-  const note = document.getElementById('resNote').value.trim();
   const staffCode = document.getElementById('resStaffCode').value.trim();
   const items = reservationDraftItems.filter(r=>r.itemNo.trim() || r.itemDesc.trim()).map(r=>({
     itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:r.qty.trim(), branch:r.branch.trim()
@@ -606,7 +600,7 @@ async function onSaveReservation(){
 
   try{
     // 1. حفظ الحجز في قاعدة البيانات
-    const inserted = await sbInsert('reservations', buildReservationRow({ id:uid(), customerName:name, phone, items, note, status:'لم يتم التواصل', staffCode }));
+    const inserted = await sbInsert('reservations', buildReservationRow({ id:uid(), customerName:name, phone, items, status:'لم يتم التواصل', staffCode }));
     state.reservations.unshift(mapReservationRow(inserted));
     
     // 2. تجهيز نص الرسالة
@@ -618,10 +612,6 @@ async function onSaveReservation(){
       msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
     });
     
-    if(note) {
-      msg += `\n📝 *ملاحظات:* ${note}\n`;
-    }
-    
     msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
 
     // 3. فتح واتساب عبر رابط مباشر مع النص الجاهز للصق في صندوق الكتابة
@@ -632,7 +622,6 @@ async function onSaveReservation(){
     // تصفير الحقول وتحديث الواجهة
     document.getElementById('resName').value=''; 
     document.getElementById('resPhone').value=''; 
-    document.getElementById('resNote').value=''; 
     document.getElementById('resStaffCode').value='';
     reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
     renderResDraftRows(); 
@@ -681,7 +670,6 @@ function renderReservationsList(){
       <ul class="med-list">
         ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}</li>`).join('')}
       </ul>
-      ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
       <div style="display:flex;justify-content:flex-end;margin-top:8px;">
         <button class="btn small danger resArchiveBtn" data-id="${r.id}">أرشفة الحجز</button>
       </div>
@@ -719,13 +707,11 @@ function renderReservationsList(){
       openEditModal('تعديل الحجز', `
         <label>اسم العميل</label><input type="text" id="edResName" value="${esc(r.customerName)}">
         <label>رقم الموبايل</label><input type="text" id="edResPhone" value="${esc(r.phone)}">
-        <label>ملاحظة الحجز</label><textarea id="edResNote" rows="2">${esc(r.note)}</textarea>
         <label>كود الزميل</label><input type="text" id="edResStaff" value="${esc(r.staffCode)}">
       `, async (modal)=>{
         const patch = {
           customerName: modal.querySelector('#edResName').value.trim(),
           phone: modal.querySelector('#edResPhone').value.trim(),
-          note: modal.querySelector('#edResNote').value.trim(),
           staffCode: modal.querySelector('#edResStaff').value.trim()
         };
         try{
@@ -753,7 +739,6 @@ function renderArchiveList(){
       <ul class="med-list">
         ${r.items.map(it=>`<li>${esc(it.itemDesc)} - كمية: ${esc(it.qty)}</li>`).join('')}
       </ul>
-      ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
     </div>
   `).join('');
 }
