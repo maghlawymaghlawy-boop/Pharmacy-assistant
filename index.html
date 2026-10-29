@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - النسخة المعدلة</title>
+<title>لوحة تحكم الصيدلية - النسخة المحدثة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- مكتبة تصدير الـ Excel -->
+<!-- مكتبة قراءة وتصدير الـ Excel -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -122,7 +122,7 @@
     margin:10px 0 4px;
   }
   label:first-child{margin-top:0;}
-  input[type=text],input[type=tel],input[type=number],input[type=search],select,textarea{
+  input[type=text],input[type=tel],input[type=number],input[type=search],select,textarea,input[type=file]{
     width:100%;
     padding:10px 12px;
     border:1px solid var(--border);
@@ -212,13 +212,16 @@
   }
   #toast.show{opacity:1;}
   .staff-tag{font-size:11.5px;font-weight:700;color:var(--primary);background:var(--primary-light);padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block;}
+  .note-box{font-size:12.5px;color:var(--warning);background:var(--warning-light);padding:4px 8px;border-radius:6px;margin-top:6px;}
+  .paid-badge{background:var(--success-light);color:var(--success);padding:2px 6px;border-radius:4px;font-size:11.5px;font-weight:700;margin-right:4px;}
+  .unpaid-badge{background:var(--danger-light);color:var(--danger);padding:2px 6px;border-radius:4px;font-size:11.5px;font-weight:700;margin-right:4px;}
 </style>
 </head>
 <body>
 <div id="app">
   <header class="top">
     <h1>لوحة تحكم الصيدلية</h1>
-    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري</p>
+    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري وقاعدة البيانات</p>
   </header>
   <nav class="tabs" id="tabsNav"></nav>
   <main id="tabContent"></main>
@@ -261,11 +264,36 @@ async function sbDelete(table, id){
   return true;
 }
 
+/* Local Item Master Dictionary for Autocomplete */
+let itemDatabase = JSON.parse(localStorage.getItem('ph_item_database') || '{}');
+
+function registerItemCodeInput(inputEl, descInputEl){
+  if(!inputEl || !descInputEl) return;
+  inputEl.oninput = ()=>{
+    const val = inputEl.value.trim();
+    if(itemDatabase[val]){
+      descInputEl.value = itemDatabase[val];
+      // trigger input event in case listeners are attached
+      descInputEl.dispatchEvent(new Event('input'));
+    }
+  };
+}
+
 function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, qty:r.quantity, staffCode:r.staff_code||'', createdAt:r.created_at }; }
 function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit, quantity:o.qty, staff_code:o.staffCode }; }
 
-function mapReservationRow(r){ return { id:r.id, customerName:r.customer_name, phone:r.customer_phone, items:r.items||[], status:r.status, staffCode:r.staff_code||'', createdAt:r.created_at }; }
-function buildReservationRow(o){ return { id:o.id, customer_name:o.customerName, customer_phone:o.phone, items:o.items, status:o.status, staff_code:o.staffCode }; }
+function mapReservationRow(r){ 
+  return { 
+    id:r.id, customerName:r.customer_name, phone:r.customer_phone, items:r.items||[], 
+    note:r.note||'', isPaid:!!r.is_paid, status:r.status, staffCode:r.staff_code||'', createdAt:r.created_at 
+  }; 
+}
+function buildReservationRow(o){ 
+  return { 
+    id:o.id, customer_name:o.customerName, customer_phone:o.phone, items:o.items, 
+    note:o.note||'', is_paid:!!o.isPaid, status:o.status, staff_code:o.staffCode 
+  }; 
+}
 
 function monthlyItemsPayload(c){
   return { dueDay:c.dueDay, companyName:c.companyName||'', cardNo:c.cardNo||'', hasCardImage:!!c.hasCardImage, cardImageData:c.cardImageData||null, cycle:c.cycle, list:c.items||[] };
@@ -343,7 +371,8 @@ function openEditModal(title, htmlContent, onSave){
 const TAB_DEFS = [
   {id:'stock', label:'مشاكل أرصدة الأصناف'},
   {id:'reservations', label:'حجوزات العملاء'},
-  {id:'monthly', label:'عميل شهري'}
+  {id:'monthly', label:'عميل شهري'},
+  {id:'database', label:'قاعدة البيانات والأصناف'}
 ];
 
 function renderTabsNav(){
@@ -360,6 +389,7 @@ function renderActiveTab(){
   if(state.activeTab==='stock') mountStockTab(el);
   else if(state.activeTab==='reservations') mountReservationsTab(el);
   else if(state.activeTab==='monthly') mountMonthlyTab(el);
+  else if(state.activeTab==='database') mountDatabaseTab(el);
 }
 
 /* TAB 1: مشاكل أرصدة الأصناف */
@@ -404,6 +434,7 @@ function mountStockTab(root){
       <div id="stList"></div>
     </div>
   `;
+  registerItemCodeInput(root.querySelector('#stItemNo'), root.querySelector('#stItemDesc'));
   root.querySelector('#stAddBtn').onclick = onAddStockIssue;
   root.querySelector('#stSearch').oninput = (e)=>{ state.search.stock = e.target.value; renderStockList(); };
   root.querySelector('#stFilterType').onchange = (e)=>{ state.filters.stockType = e.target.value; renderStockList(); };
@@ -477,9 +508,13 @@ function renderStockList(){
         <label>الكمية</label><input type="number" id="edQty" value="${esc(it.qty||'')}">
         <label>كود الزميل</label><input type="text" id="edStaff" value="${esc(it.staffCode)}">
       `, async (modal)=>{
+        const edNoInput = modal.querySelector('#edItemNo');
+        const edDescInput = modal.querySelector('#edItemDesc');
+        registerItemCodeInput(edNoInput, edDescInput);
+
         const patch = {
-          itemNo: modal.querySelector('#edItemNo').value.trim(),
-          itemDesc: modal.querySelector('#edItemDesc').value.trim(),
+          itemNo: edNoInput.value.trim(),
+          itemDesc: edDescInput.value.trim(),
           type: modal.querySelector('#edType').value,
           unit: modal.querySelector('#edUnit').value,
           qty: modal.querySelector('#edQty').value ? Number(modal.querySelector('#edQty').value) : null,
@@ -514,9 +549,20 @@ function mountReservationsTab(root){
       <input type="text" id="resName" placeholder="اسم العميل">
       <label>رقم الموبايل</label>
       <input type="tel" id="resPhone" placeholder="رقم الموبايل">
+      
       <label>الأصناف المحجوزة</label>
       <div id="resItemsWrap"></div>
       <button class="btn ghost" id="resAddRow">+ إضافة صنف آخر</button>
+
+      <label>ملاحظة الحجز</label>
+      <textarea id="resNote" placeholder="اكتب أي ملاحظات إضافية تخص الحجز..." rows="2"></textarea>
+
+      <div style="margin:12px 0;background:var(--card-bg);padding:10px;border-radius:var(--radius-sm);">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+          <input type="checkbox" id="resIsPaid" style="width:18px;height:18px;accent-color:var(--primary);">
+          <span>خالص الثمن (مدفوع مقدماً)</span>
+        </label>
+      </div>
 
       <label>كود الزميل (القائم بالإدخال) *</label>
       <input type="text" id="resStaffCode" placeholder="أدخل كودك الوظيفي">
@@ -554,9 +600,10 @@ function mountReservationsTab(root){
   };
   root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
   root.querySelector('#resExport').onclick = ()=>{
-    const data = state.reservations.map((r, idx)=>({
-      'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة التواصل': r.status,
+    const data = state.reservations.filter(r=>r.status!=='أرشيف').map((r, idx)=>({
+      'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة الدفع': r.isPaid?'خالص الثمن':'غير خالص الثمن', 'حالة التواصل': r.status,
       'الأدوية المحجوزة': r.items.map(it=>`${it.itemDesc} (${it.itemNo}) - كمية: ${it.qty} - فرع: ${it.branch||'مباشر'}`).join(' | '),
+      'ملاحظات الحجز': r.note || '',
       'كود الزميل': r.staffCode, 'التاريخ': fmtDate(r.createdAt)
     }));
     exportToExcel('حجوزات_العملاء', data);
@@ -567,20 +614,37 @@ function mountReservationsTab(root){
 
 function renderResDraftRows(){
   const wrap = document.getElementById('resItemsWrap');
+  if(!wrap) return;
   wrap.innerHTML = reservationDraftItems.map((row,i)=>`
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin-bottom:8px;">
       <div class="draft-row" style="margin-bottom:6px;">
-        <input type="text" placeholder="رقم الصنف" value="${esc(row.itemNo)}" data-i="${i}" data-f="itemNo" class="draftInput">
-        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="itemDesc" class="draftInput">
+        <input type="text" placeholder="رقم الصنف" value="${esc(row.itemNo)}" data-i="${i}" data-f="itemNo" class="draftInput resItemNoInp">
+        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="itemDesc" class="draftInput resItemDescInp">
         <input type="number" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="draftInput" style="max-width:70px;">
         ${reservationDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
       </div>
       <input type="text" placeholder="اسم الفرع اللي هيجي منه الصنف" value="${esc(row.branch)}" data-i="${i}" data-f="branch" class="draftInput">
     </div>
   `).join('');
+
   wrap.querySelectorAll('.draftInput').forEach(inp=>{
     inp.oninput = ()=>{ reservationDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
   });
+
+  // Attach autocomplete for draft rows
+  wrap.querySelectorAll('.resItemNoInp').forEach(noInp=>{
+    const idx = noInp.dataset.i;
+    const descInp = wrap.querySelector(`.resItemDescInp[data-i="${idx}"]`);
+    noInp.oninput = ()=>{
+      reservationDraftItems[idx].itemNo = noInp.value;
+      const val = noInp.value.trim();
+      if(itemDatabase[val] && descInp){
+        descInp.value = itemDatabase[val];
+        reservationDraftItems[idx].itemDesc = itemDatabase[val];
+      }
+    };
+  });
+
   wrap.querySelectorAll('.rm').forEach(btn=>{
     btn.onclick = ()=>{ reservationDraftItems.splice(Number(btn.dataset.i),1); renderResDraftRows(); };
   });
@@ -589,6 +653,8 @@ function renderResDraftRows(){
 async function onSaveReservation(){
   const name = document.getElementById('resName').value.trim();
   const phone = document.getElementById('resPhone').value.trim();
+  const note = document.getElementById('resNote').value.trim();
+  const isPaid = document.getElementById('resIsPaid').checked;
   const staffCode = document.getElementById('resStaffCode').value.trim();
   const items = reservationDraftItems.filter(r=>r.itemNo.trim() || r.itemDesc.trim()).map(r=>({
     itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:r.qty.trim(), branch:r.branch.trim()
@@ -599,29 +665,39 @@ async function onSaveReservation(){
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
   try{
-    // 1. حفظ الحجز في قاعدة البيانات
-    const inserted = await sbInsert('reservations', buildReservationRow({ id:uid(), customerName:name, phone, items, status:'لم يتم التواصل', staffCode }));
+    // إذا كان خالص الثمن، يتم حفظه مباشرة في الأرشيف (أو حالة الأرشيف)
+    const initialStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
+    const inserted = await sbInsert('reservations', buildReservationRow({ 
+      id:uid(), customerName:name, phone, items, note, isPaid, status:initialStatus, staffCode 
+    }));
     state.reservations.unshift(mapReservationRow(inserted));
     
-    // 2. تجهيز نص الرسالة
+    // تجهيز نص الرسالة
     let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
     msg += `👤 *اسم العميل:* ${name}\n`;
-    msg += `📞 *الموبايل:* ${phone}\n\n`;
+    msg += `📞 *الموبايل:* ${phone}\n`;
+    msg += `💰 *الحالة المالية:* ${isPaid ? '✅ خالص الثمن' : '⚠️ غير خالص الثمن'}\n\n`;
     msg += `💊 *الأصناف المحجوزة:*\n`;
     items.forEach((it, index) => {
       msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
     });
     
+    if(note) {
+      msg += `\n📝 *ملاحظات:* ${note}\n`;
+    }
+    
     msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
 
-    // 3. فتح واتساب عبر رابط مباشر مع النص الجاهز للصق في صندوق الكتابة
+    // فتح واتساب
     const encodedMessage = encodeURIComponent(msg);
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
 
-    // تصفير الحقول وتحديث الواجهة
+    // تصفير الحقول
     document.getElementById('resName').value=''; 
     document.getElementById('resPhone').value=''; 
+    document.getElementById('resNote').value='';
+    document.getElementById('resIsPaid').checked = false;
     document.getElementById('resStaffCode').value='';
     reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
     renderResDraftRows(); 
@@ -638,7 +714,9 @@ function renderReservationsList(){
   const list = document.getElementById('resList');
   if(!list) return;
   const q = state.search.reservations.trim().toLowerCase();
+  // الحجوزات النشطة هي التي ليست في الأرشيف وليست خالص الثمن التلقائي المؤرشف
   const items = state.reservations.filter(r=>{
+    if(r.status==='أرشيف') return false;
     if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
     if(q){
       const matchClient = r.customerName.toLowerCase().includes(q) || r.phone.includes(q);
@@ -656,6 +734,7 @@ function renderReservationsList(){
         <div>
           <div class="title">
             <span>#${idx+1} ${esc(r.customerName)}</span>
+            ${r.isPaid ? '<span class="paid-badge">خالص الثمن</span>' : '<span class="unpaid-badge">غير خالص الثمن</span>'}
             <button class="edit-btn-icon" data-id="${r.id}" title="تعديل الحجز">✏️</button>
           </div>
           <div class="sub">📞 موبايل: <a href="tel:${esc(r.phone)}" style="color:var(--primary);font-weight:700;">${esc(r.phone)}</a></div>
@@ -670,7 +749,12 @@ function renderReservationsList(){
       <ul class="med-list">
         ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}</li>`).join('')}
       </ul>
-      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+      ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0;">
+          <input type="checkbox" data-id="${r.id}" class="resPaidToggle" ${r.isPaid?'checked':''} style="width:16px;height:16px;accent-color:var(--primary);">
+          <span>خالص الثمن</span>
+        </label>
         <button class="btn small danger resArchiveBtn" data-id="${r.id}">أرشفة الحجز</button>
       </div>
     </div>
@@ -689,12 +773,28 @@ function renderReservationsList(){
     };
   });
 
+  list.querySelectorAll('.resPaidToggle').forEach(chk=>{
+    chk.onchange = async ()=>{
+      const id = chk.dataset.id;
+      const isPaid = chk.checked;
+      const newStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
+      try{
+        await sbUpdate('reservations', id, { is_paid: isPaid, status: newStatus });
+        const obj = state.reservations.find(x=>x.id===id);
+        if(obj) { obj.isPaid = isPaid; obj.status = newStatus; }
+        renderReservationsList(); renderArchiveList();
+        showToast(isPaid ? 'تم تعيين الحجز كـ خالص الثمن ونقله للأرشيف' : 'تم إلغاء خالص الثمن وإعادته للحجوزات النشطة');
+      }catch(e){ chk.checked = !isPaid; showToast('تعذر التحديث'); }
+    };
+  });
+
   list.querySelectorAll('.resArchiveBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
       try{
         await sbUpdate('reservations', id, { status: 'أرشيف' });
-        state.reservations = state.reservations.filter(x=>x.id!==id);
+        const obj = state.reservations.find(x=>x.id===id);
+        if(obj) obj.status = 'أرشيف';
         renderReservationsList(); renderArchiveList(); showToast('تمت أرشفة الحجز');
       }catch(e){ showToast('تعذر الأرشفة'); }
     };
@@ -707,16 +807,27 @@ function renderReservationsList(){
       openEditModal('تعديل الحجز', `
         <label>اسم العميل</label><input type="text" id="edResName" value="${esc(r.customerName)}">
         <label>رقم الموبايل</label><input type="text" id="edResPhone" value="${esc(r.phone)}">
+        <label>ملاحظة الحجز</label><textarea id="edResNote" rows="2">${esc(r.note)}</textarea>
+        <div style="margin:10px 0;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="edResPaid" ${r.isPaid?'checked':''} style="width:18px;height:18px;accent-color:var(--primary);">
+            <span>خالص الثمن</span>
+          </label>
+        </div>
         <label>كود الزميل</label><input type="text" id="edResStaff" value="${esc(r.staffCode)}">
       `, async (modal)=>{
         const patch = {
           customerName: modal.querySelector('#edResName').value.trim(),
           phone: modal.querySelector('#edResPhone').value.trim(),
+          note: modal.querySelector('#edResNote').value.trim(),
+          isPaid: modal.querySelector('#edResPaid').checked,
+          status: modal.querySelector('#edResPaid').checked ? 'أرشيف' : (r.status==='أرشيف' ? 'لم يتم التواصل' : r.status),
           staffCode: modal.querySelector('#edResStaff').value.trim()
         };
         try{
           await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
-          Object.assign(r, patch); renderReservationsList(); showToast('تم التعديل بنجاح'); return true;
+          Object.assign(r, patch); 
+          renderReservationsList(); renderArchiveList(); showToast('تم التعديل بنجاح'); return true;
         }catch(e){ showToast('تعذر الحفظ'); return false; }
       });
     };
@@ -731,19 +842,154 @@ function renderArchiveList(){
   if(archived.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات مؤرشفة</div>`; return; }
   
   list.innerHTML = archived.map(r=>`
-    <div class="item-card" style="opacity:0.85;">
+    <div class="item-card" style="opacity:0.9;">
       <div class="top-row">
-        <div class="title">${esc(r.customerName)} (${esc(r.phone)})</div>
-        <span class="badge grey">مؤرشف</span>
+        <div>
+          <div class="title">
+            <span>${esc(r.customerName)} (${esc(r.phone)})</span>
+            ${r.isPaid ? '<span class="paid-badge">خالص الثمن</span>' : '<span class="unpaid-badge">غير خالص الثمن</span>'}
+          </div>
+          <div class="sub">تاريخ الحجز: ${fmtDate(r.createdAt)}</div>
+        </div>
+        <button class="btn small secondary restoreResBtn" data-id="${r.id}">إعادة للنشطة</button>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`<li>${esc(it.itemDesc)} - كمية: ${esc(it.qty)}</li>`).join('')}
+        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> - كمية: ${esc(it.qty)}</li>`).join('')}
       </ul>
+      ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
     </div>
   `).join('');
+
+  list.querySelectorAll('.restoreResBtn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.id;
+      try{
+        await sbUpdate('reservations', id, { status: 'لم يتم التواصل', is_paid: false });
+        const obj = state.reservations.find(x=>x.id===id);
+        if(obj) { obj.status = 'لم يتم التواصل'; obj.isPaid = false; }
+        renderReservationsList(); renderArchiveList(); showToast('تمت إعادة الحجز للحجوزات النشطة');
+      }catch(e){ showToast('تعذر الاستعادة'); }
+    };
+  });
 }
 
-/* TAB 3: عميل شهري */
+/* TAB 3: قاعدة البيانات والأصناف */
+function mountDatabaseTab(root){
+  root.innerHTML = `
+    <div class="card">
+      <p class="section-title">📥 رفع ملف الأصناف (Excel / CSV)</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">
+        يجب أن يحتوي الشيت على عمودين رئيسيين أو يحتويان على الكلمات المفتاحية التالية: <b>no</b> (كود الصنف) و <b>description</b> (اسم الصنف).
+      </p>
+      <input type="file" id="excelFileInp" accept=".xlsx, .xls, .csv">
+      <button class="btn" id="uploadExcelBtn">معالجة وحفظ الأصناف في القاعدة</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <span>قاعدة البيانات الحالية (${Object.keys(itemDatabase).length} صنف مسجل)</span>
+        <button class="btn small danger" id="clearDbBtn">حذف القاعدة</button>
+      </div>
+      <div class="searchbar"><input type="search" id="dbSearch" placeholder="ابحث بكود الصنف أو بالاسم..."></div>
+      <div id="dbItemsList" style="max-height:350px;overflow-y:auto;"></div>
+    </div>
+  `;
+
+  root.querySelector('#uploadExcelBtn').onclick = ()=>{
+    const fileInput = root.querySelector('#excelFileInp');
+    if(!fileInput.files || !fileInput.files[0]){ showToast('من فضلك اختر ملف أولاً'); return; }
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, {defval:''});
+
+        let count = 0;
+        json.forEach(row=>{
+          // البحث المرن عن أسماء الأعمدة للكود والاسم
+          let noKey = Object.keys(row).find(k=>/no|code|رقم|كود/i.test(k));
+          let descKey = Object.keys(row).find(k=>/desc|name|اسم|وصف/i.test(k));
+
+          if(!noKey || !descKey){
+            // إذا لم يتم العثور، نأخذ أول عمود وثاني عمود افتراضياً
+            const keys = Object.keys(row);
+            noKey = keys[0];
+            descKey = keys[1];
+          }
+
+          if(noKey && descKey && row[noKey]){
+            const code = String(row[noKey]).trim();
+            const desc = String(row[descKey]).trim();
+            if(code && desc){
+              itemDatabase[code] = desc;
+              count++;
+            }
+          }
+        });
+
+        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+        showToast(`تم استيراد ${count} صنف بنجاح!`);
+        renderDbItemsList();
+      }catch(err){
+        showToast('حدث خطأ أثناء قراءة الملف، تأكد من صحة التنسيق');
+      }
+    };
+    reader.readAsArrayBuffer(fileInput.files[0]);
+  };
+
+  root.querySelector('#clearDbBtn').onclick = ()=>{
+    if(confirm('هل أنت متأكد من حذف قاعدة الأصناف بالكامل؟')){
+      itemDatabase = {};
+      localStorage.removeItem('ph_item_database');
+      renderDbItemsList();
+      showToast('تم إفراغ قاعدة البيانات');
+    }
+  };
+
+  root.querySelector('#dbSearch').oninput = (e)=>{
+    renderDbItemsList(e.target.value);
+  };
+
+  renderDbItemsList();
+}
+
+function renderDbItemsList(query=''){
+  const list = document.getElementById('dbItemsList');
+  if(!list) return;
+  const entries = Object.entries(itemDatabase);
+  const q = query.trim().toLowerCase();
+  const filtered = entries.filter(([code, desc])=> !q || code.toLowerCase().includes(q) || desc.toLowerCase().includes(q));
+
+  if(filtered.length===0){
+    list.innerHTML = `<div class="empty-state">لا توجد أصناف مسجلة في القاعدة حالياً</div>`;
+    return;
+  }
+
+  list.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:var(--card-bg);text-align:right;">
+          <th style="padding:8px;border:1px solid var(--border);">الكود (No)</th>
+          <th style="padding:8px;border:1px solid var(--border);">اسم الصنف (Description)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.slice(0, 100).map(([code, desc])=>`
+          <tr>
+            <td style="padding:6px 8px;border:1px solid var(--border);font-weight:700;">${esc(code)}</td>
+            <td style="padding:6px 8px;border:1px solid var(--border);">${esc(desc)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    ${filtered.length > 100 ? `<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px;">يتم عرض أول 100 صنف فقط من إجمالي ${filtered.length}</div>` : ''}
+  `;
+}
+
+/* TAB 4: عميل شهري */
 let monthlyDraftItems = [{name:'', qty:'', freq:'يومي'}];
 let activeMonthlyCustomer = null;
 
