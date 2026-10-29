@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - النسخة مع خيارات الحذف</title>
+<title>لوحة تحكم الصيدلية - تبويب الأرشيف المنفصل</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -370,7 +370,7 @@ let state = {
 };
 
 function uid(){ return 'id_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
-function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])[c]); }
 function todayInfo(){ const d = new Date(); return { day:d.getDate(), monthKey: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0') }; }
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -408,9 +408,11 @@ function openEditModal(title, htmlContent, onSave){
   };
 }
 
+/* التبويبات المحدثة لترتيب وتسهيل الوصول */
 const TAB_DEFS = [
   {id:'stock', label:'مشاكل أرصدة الأصناف'},
-  {id:'reservations', label:'حجوزات العملاء'},
+  {id:'reservations', label:'حجوزات العملاء النشطة'},
+  {id:'archive', label:'أرشيف الحجوزات'},
   {id:'monthly', label:'عميل شهري'},
   {id:'database', label:'قاعدة البيانات والأصناف'}
 ];
@@ -428,6 +430,7 @@ function renderActiveTab(){
   el.innerHTML = '';
   if(state.activeTab==='stock') mountStockTab(el);
   else if(state.activeTab==='reservations') mountReservationsTab(el);
+  else if(state.activeTab==='archive') mountArchiveTab(el);
   else if(state.activeTab==='monthly') mountMonthlyTab(el);
   else if(state.activeTab==='database') mountDatabaseTab(el);
 }
@@ -576,7 +579,7 @@ function renderStockList(){
   });
 }
 
-/* TAB 2: حجوزات العملاء */
+/* TAB 2: حجوزات العملاء النشطة */
 let reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
 
 function mountReservationsTab(root){
@@ -610,7 +613,7 @@ function mountReservationsTab(root){
 
     <div class="card">
       <div class="section-title">
-        <span>الحجوزات النشطة</span>
+        <span>الحجوزات النشطة الحالية</span>
         <div class="actions">
           <button class="export-btn" id="resExport">📊 تصدير إلى Excel</button>
           <button class="refresh" id="resRefresh">⟳ تحديث</button>
@@ -622,17 +625,6 @@ function mountReservationsTab(root){
       </div>
       <div id="resList"></div>
     </div>
-
-    <div class="card">
-      <div class="section-title">
-        <span>أرشيف الحجوزات السابقة</span>
-        <div class="actions">
-          <button class="btn small danger" id="clearArchiveBtn" style="margin-top:0;">🗑️ تفريغ الأرشيف</button>
-        </div>
-      </div>
-      <div class="searchbar"><input type="search" id="arcSearch" placeholder="ابحث في الأرشيف..."></div>
-      <div id="arcList"></div>
-    </div>
   `;
   renderResDraftRows();
   root.querySelector('#resAddRow').onclick = ()=>{ reservationDraftItems.push({itemNo:'',itemDesc:'',qty:'',branch:''}); renderResDraftRows(); };
@@ -640,24 +632,8 @@ function mountReservationsTab(root){
   root.querySelector('#resSearch').oninput = (e)=>{ state.search.reservations = e.target.value; renderReservationsList(); };
   root.querySelector('#resFilterStatus').onchange = (e)=>{ state.filters.resStatus = e.target.value; renderReservationsList(); };
   root.querySelector('#resRefresh').onclick = async ()=>{
-    state.reservations = await fetchReservations(); renderReservationsList(); renderArchiveList(); showToast('تم التحديث');
+    state.reservations = await fetchReservations(); renderReservationsList(); showToast('تم التحديث');
   };
-  root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
-  
-  // زر تفريغ الأرشيف بالكامل
-  root.querySelector('#clearArchiveBtn').onclick = async ()=>{
-    const archivedItems = state.reservations.filter(r => r.status === 'أرشيف');
-    if(archivedItems.length === 0){ showToast('الأرشيف فارغ بالفعل'); return; }
-    if(confirm('هل أنت متأكد من حذف جميع الحجوزات المؤرشفة نهائياً؟')){
-      for(let r of archivedItems){
-        await sbDelete('reservations', r.id);
-      }
-      state.reservations = state.reservations.filter(r => r.status !== 'أرشيف');
-      renderArchiveList();
-      showToast('تم تفريغ الأرشيف بالكامل بنجاح');
-    }
-  };
-
   root.querySelector('#resExport').onclick = ()=>{
     const data = state.reservations.filter(r=>r.status!=='أرشيف').map((r, idx)=>({
       'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة الدفع': r.isPaid?'خالص الثمن':'غير خالص الثمن', 'حالة التواصل': r.status,
@@ -665,10 +641,9 @@ function mountReservationsTab(root){
       'ملاحظات الحجز': r.note || '',
       'كود الزميل': r.staffCode, 'التاريخ': fmtDate(r.createdAt)
     }));
-    exportToExcel('حجوزات_العملاء', data);
+    exportToExcel('حجوزات_العملاء_النشطة', data);
   };
   renderReservationsList();
-  renderArchiveList();
 }
 
 function renderResDraftRows(){
@@ -765,9 +740,8 @@ async function onSaveReservation(){
   reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
   renderResDraftRows(); 
   renderReservationsList(); 
-  renderArchiveList(); 
   
-  showToast('تم حفظ الحجز وفتح واتساب بنجاح!');
+  showToast(isPaid ? 'تم الحفظ وإضافة الحجز للأرشيف مباشرة لأنه خالص الثمن' : 'تم حفظ الحجز وفتح واتساب بنجاح!');
 }
 
 function renderReservationsList(){
@@ -826,7 +800,7 @@ function renderReservationsList(){
       await sbUpdate('reservations', id, { status });
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) obj.status = status;
-      renderReservationsList(); renderArchiveList(); showToast('تم تحديث حالة التواصل');
+      renderReservationsList(); showToast('تم تحديث حالة التواصل');
     };
   });
 
@@ -838,8 +812,8 @@ function renderReservationsList(){
       await sbUpdate('reservations', id, { is_paid: isPaid, status: newStatus });
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) { obj.isPaid = isPaid; obj.status = newStatus; }
-      renderReservationsList(); renderArchiveList();
-      showToast(isPaid ? 'تم تعيين الحجز كـ خالص الثمن ونقله للأرشيف' : 'تم إلغاء خالص الثمن وإعادته للحجوزات النشطة');
+      renderReservationsList();
+      showToast(isPaid ? 'تم تعيين الحجز كـ خالص الثمن ونقله للشاشة المنفصلة للأرشيف' : 'تم إلغاء خالص الثمن وإعادته للحجوزات النشطة');
     };
   });
 
@@ -849,7 +823,7 @@ function renderReservationsList(){
       await sbUpdate('reservations', id, { status: 'أرشيف' });
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) obj.status = 'أرشيف';
-      renderReservationsList(); renderArchiveList(); showToast('تمت أرشفة الحجز');
+      renderReservationsList(); showToast('تم نقل الحجز إلى الأرشيف');
     };
   });
 
@@ -879,10 +853,47 @@ function renderReservationsList(){
         };
         await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
         Object.assign(r, patch); 
-        renderReservationsList(); renderArchiveList(); showToast('تم التعديل بنجاح');
+        renderReservationsList(); showToast('تم التعديل بنجاح');
       });
     };
   });
+}
+
+/* TAB 3: شاشة أرشفة الحجوزات المنفصلة بالكامل */
+function mountArchiveTab(root){
+  root.innerHTML = `
+    <div class="card">
+      <div class="section-title">
+        <span>أرشيف الحجوزات المكتملة والسابقة</span>
+        <div class="actions">
+          <button class="btn small danger" id="clearArchiveBtn" style="margin-top:0;">🗑️ تفريغ الأرشيف</button>
+          <button class="refresh" id="arcRefresh">⟳ تحديث</button>
+        </div>
+      </div>
+      <div class="searchbar"><input type="search" id="arcSearch" placeholder="ابحث باسم العميل أو الموبايل في الأرشيف..."></div>
+      <div id="arcList"></div>
+    </div>
+  `;
+
+  root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
+  root.querySelector('#arcRefresh').onclick = async ()=>{
+    state.reservations = await fetchReservations(); renderArchiveList(); showToast('تم التحديث');
+  };
+
+  root.querySelector('#clearArchiveBtn').onclick = async ()=>{
+    const archivedItems = state.reservations.filter(r => r.status === 'أرشيف');
+    if(archivedItems.length === 0){ showToast('الأرشيف فارغ بالفعل'); return; }
+    if(confirm('هل أنت متأكد من حذف جميع الحجوزات المؤرشفة نهائياً؟')){
+      for(let r of archivedItems){
+        await sbDelete('reservations', r.id);
+      }
+      state.reservations = state.reservations.filter(r => r.status !== 'أرشيف');
+      renderArchiveList();
+      showToast('تم تفريغ الأرشيف بالكامل بنجاح');
+    }
+  };
+
+  renderArchiveList();
 }
 
 function renderArchiveList(){
@@ -890,17 +901,18 @@ function renderArchiveList(){
   if(!list) return;
   const q = state.search.archive.trim().toLowerCase();
   const archived = state.reservations.filter(r=> r.status==='أرشيف' && (!q || r.customerName.toLowerCase().includes(q) || r.phone.includes(q)));
-  if(archived.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات مؤرشفة</div>`; return; }
+  if(archived.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات مؤرشفة حالياً</div>`; return; }
   
   list.innerHTML = archived.map(r=>`
-    <div class="item-card" style="opacity:0.9;">
+    <div class="item-card" style="opacity:0.95;">
       <div class="top-row">
         <div>
           <div class="title">
-            <span>${esc(r.customerName)} (${esc(r.phone)})</span>
+            <span>${esc(r.customerName)}</span>
             ${r.isPaid ? '<span class="paid-badge">خالص الثمن</span>' : '<span class="unpaid-badge">غير خالص الثمن</span>'}
           </div>
-          <div class="sub">تاريخ الحجز: ${fmtDate(r.createdAt)}</div>
+          <div class="sub">📞 موبايل: <a href="tel:${esc(r.phone)}" style="color:var(--primary);font-weight:700;">${esc(r.phone)}</a> · التاريخ: ${fmtDate(r.createdAt)}</div>
+          <div class="staff-tag">القائم بالإدخال: ${esc(r.staffCode || 'غير محدد')}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           <button class="btn small secondary restoreResBtn" data-id="${r.id}">استعادة</button>
@@ -908,7 +920,7 @@ function renderArchiveList(){
         </div>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> - كمية: ${esc(it.qty)}</li>`).join('')}
+        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}</li>`).join('')}
       </ul>
       ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
     </div>
@@ -920,11 +932,10 @@ function renderArchiveList(){
       await sbUpdate('reservations', id, { status: 'لم يتم التواصل', is_paid: false });
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) { obj.status = 'لم يتم التواصل'; obj.isPaid = false; }
-      renderReservationsList(); renderArchiveList(); showToast('تمت إعادة الحجز للحجوزات النشطة');
+      renderArchiveList(); showToast('تمت إعادة الحجز لشاشة الحجوزات النشطة');
     };
   });
 
-  // زر حذف عميل معين من الأرشيف
   list.querySelectorAll('.deleteArchivedBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
@@ -938,7 +949,7 @@ function renderArchiveList(){
   });
 }
 
-/* TAB 3: قاعدة البيانات والأصناف الذكية */
+/* TAB 4: قاعدة البيانات والأصناف الذكية */
 function mountDatabaseTab(root){
   root.innerHTML = `
     <div class="card">
@@ -1095,7 +1106,7 @@ function renderDbItemsList(query=''){
   `;
 }
 
-/* TAB 4: عميل شهري */
+/* TAB 5: عميل شهري */
 let monthlyDraftItems = [{name:'', qty:'', freq:'يومي'}];
 
 function mountMonthlyTab(root){
@@ -1288,14 +1299,4 @@ async function initApp(){
     ]);
     state.stock = stock;
     state.reservations = reservations;
-    state.monthly = monthly;
-    renderActiveTab();
-  }catch(e){
-    renderActiveTab();
-  }
-}
-
-initApp();
-</script>
-</body>
-</html>
+    state.monthly
