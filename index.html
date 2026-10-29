@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - النسخة المحدثة</title>
+<title>لوحة تحكم الصيدلية - النسخة النهائية المتكاملة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -221,7 +221,7 @@
 <div id="app">
   <header class="top">
     <h1>لوحة تحكم الصيدلية</h1>
-    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري وقاعدة البيانات</p>
+    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري والقاعدة الذكية</p>
   </header>
   <nav class="tabs" id="tabsNav"></nav>
   <main id="tabContent"></main>
@@ -264,7 +264,7 @@ async function sbDelete(table, id){
   return true;
 }
 
-/* Local Item Master Dictionary for Autocomplete */
+/* Smart Master Item Dictionary */
 let itemDatabase = JSON.parse(localStorage.getItem('ph_item_database') || '{}');
 
 function registerItemCodeInput(inputEl, descInputEl){
@@ -273,7 +273,6 @@ function registerItemCodeInput(inputEl, descInputEl){
     const val = inputEl.value.trim();
     if(itemDatabase[val]){
       descInputEl.value = itemDatabase[val];
-      // trigger input event in case listeners are attached
       descInputEl.dispatchEvent(new Event('input'));
     }
   };
@@ -631,7 +630,6 @@ function renderResDraftRows(){
     inp.oninput = ()=>{ reservationDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
   });
 
-  // Attach autocomplete for draft rows
   wrap.querySelectorAll('.resItemNoInp').forEach(noInp=>{
     const idx = noInp.dataset.i;
     const descInp = wrap.querySelector(`.resItemDescInp[data-i="${idx}"]`);
@@ -665,14 +663,12 @@ async function onSaveReservation(){
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
   try{
-    // إذا كان خالص الثمن، يتم حفظه مباشرة في الأرشيف (أو حالة الأرشيف)
     const initialStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
     const inserted = await sbInsert('reservations', buildReservationRow({ 
       id:uid(), customerName:name, phone, items, note, isPaid, status:initialStatus, staffCode 
     }));
     state.reservations.unshift(mapReservationRow(inserted));
     
-    // تجهيز نص الرسالة
     let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
     msg += `👤 *اسم العميل:* ${name}\n`;
     msg += `📞 *الموبايل:* ${phone}\n`;
@@ -688,12 +684,10 @@ async function onSaveReservation(){
     
     msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
 
-    // فتح واتساب
     const encodedMessage = encodeURIComponent(msg);
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
 
-    // تصفير الحقول
     document.getElementById('resName').value=''; 
     document.getElementById('resPhone').value=''; 
     document.getElementById('resNote').value='';
@@ -714,7 +708,6 @@ function renderReservationsList(){
   const list = document.getElementById('resList');
   if(!list) return;
   const q = state.search.reservations.trim().toLowerCase();
-  // الحجوزات النشطة هي التي ليست في الأرشيف وليست خالص الثمن التلقائي المؤرشف
   const items = state.reservations.filter(r=>{
     if(r.status==='أرشيف') return false;
     if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
@@ -873,25 +866,37 @@ function renderArchiveList(){
   });
 }
 
-/* TAB 3: قاعدة البيانات والأصناف */
+/* TAB 3: قاعدة البيانات والأصناف الذكية */
 function mountDatabaseTab(root){
   root.innerHTML = `
     <div class="card">
-      <p class="section-title">📥 رفع ملف الأصناف (Excel / CSV)</p>
+      <p class="section-title">📥 رفع شيت الأصناف (Excel / CSV)</p>
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">
-        يجب أن يحتوي الشيت على عمودين رئيسيين أو يحتويان على الكلمات المفتاحية التالية: <b>no</b> (كود الصنف) و <b>description</b> (اسم الصنف).
+        اختر ملف شيت الأصناف لتفعيل الإكمال التلقائي الفوري لكود الصنف في جميع أقسام الموقع.
       </p>
       <input type="file" id="excelFileInp" accept=".xlsx, .xls, .csv">
-      <button class="btn" id="uploadExcelBtn">معالجة وحفظ الأصناف في القاعدة</button>
+      <button class="btn" id="uploadExcelBtn">حفظ وتفعيل الأصناف</button>
+    </div>
+
+    <div class="card" style="background:var(--primary-light);">
+      <p class="section-title">🔄 مزامنة القاعدة بين الأجهزة</p>
+      <p style="font-size:12.5px;color:var(--primary-dark);margin-bottom:10px;">
+        قم بتصدير ملف القاعدة ومشاركته مع زملائك أو استيراده هنا لتحديث كل الأجهزة فوراً:
+      </p>
+      <div class="row">
+        <button class="btn secondary" id="exportDbJson">📤 تصدير ملف القاعدة</button>
+        <button class="btn secondary" id="importDbJsonBtn">📥 استيراد ملف القاعدة</button>
+        <input type="file" id="importDbFileInp" accept=".json" style="display:none;">
+      </div>
     </div>
 
     <div class="card">
       <div class="section-title">
-        <span>قاعدة البيانات الحالية (${Object.keys(itemDatabase).length} صنف مسجل)</span>
+        <span>الأصناف المسجلة (${Object.keys(itemDatabase).length} صنف)</span>
         <button class="btn small danger" id="clearDbBtn">حذف القاعدة</button>
       </div>
       <div class="searchbar"><input type="search" id="dbSearch" placeholder="ابحث بكود الصنف أو بالاسم..."></div>
-      <div id="dbItemsList" style="max-height:350px;overflow-y:auto;"></div>
+      <div id="dbItemsList" style="max-height:300px;overflow-y:auto;"></div>
     </div>
   `;
 
@@ -909,12 +914,10 @@ function mountDatabaseTab(root){
 
         let count = 0;
         json.forEach(row=>{
-          // البحث المرن عن أسماء الأعمدة للكود والاسم
           let noKey = Object.keys(row).find(k=>/no|code|رقم|كود/i.test(k));
           let descKey = Object.keys(row).find(k=>/desc|name|اسم|وصف/i.test(k));
 
           if(!noKey || !descKey){
-            // إذا لم يتم العثور، نأخذ أول عمود وثاني عمود افتراضياً
             const keys = Object.keys(row);
             noKey = keys[0];
             descKey = keys[1];
@@ -931,21 +934,52 @@ function mountDatabaseTab(root){
         });
 
         localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
-        showToast(`تم استيراد ${count} صنف بنجاح!`);
+        showToast(`تم استيراد ${count} صنف بنجاح وتفعيل الإكمال التلقائي!`);
         renderDbItemsList();
       }catch(err){
-        showToast('حدث خطأ أثناء قراءة الملف، تأكد من صحة التنسيق');
+        showToast('حدث خطأ أثناء قراءة الملف');
       }
     };
     reader.readAsArrayBuffer(fileInput.files[0]);
   };
 
+  root.querySelector('#exportDbJson').onclick = ()=>{
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(itemDatabase));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", "pharmacy_items_db.json");
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    showToast('تم تصدير ملف القاعدة بنجاح');
+  };
+
+  const importFileInp = root.querySelector('#importDbFileInp');
+  root.querySelector('#importDbJsonBtn').onclick = ()=> importFileInp.click();
+  importFileInp.onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt)=>{
+      try{
+        const importedObj = JSON.parse(evt.target.result);
+        itemDatabase = importedObj;
+        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+        showToast('تم تحديث واستيراد القاعدة بنجاح على هذا الجهاز!');
+        renderDbItemsList();
+      }catch(err){
+        showToast('ملف غير صالح');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   root.querySelector('#clearDbBtn').onclick = ()=>{
-    if(confirm('هل أنت متأكد من حذف قاعدة الأصناف بالكامل؟')){
+    if(confirm('هل أنت متأكد من إفراغ قاعدة الأصناف؟')){
       itemDatabase = {};
       localStorage.removeItem('ph_item_database');
       renderDbItemsList();
-      showToast('تم إفراغ قاعدة البيانات');
+      showToast('تم إفراغ القاعدة');
     }
   };
 
@@ -964,7 +998,7 @@ function renderDbItemsList(query=''){
   const filtered = entries.filter(([code, desc])=> !q || code.toLowerCase().includes(q) || desc.toLowerCase().includes(q));
 
   if(filtered.length===0){
-    list.innerHTML = `<div class="empty-state">لا توجد أصناف مسجلة في القاعدة حالياً</div>`;
+    list.innerHTML = `<div class="empty-state">لا توجد أصناف مسجلة حالياً</div>`;
     return;
   }
 
