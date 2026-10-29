@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - مع الوضع الليلي</title>
+<title>لوحة تحكم الصيدلية - الدفع لكل صنف على حدة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -29,7 +29,6 @@
     --radius-sm:9px;
   }
 
-  /* متغيرات الوضع الليلي */
   body.dark-mode {
     --primary:#10B981;
     --primary-dark:#059669;
@@ -219,7 +218,7 @@
   .badge.grey{background:var(--primary-light);color:var(--primary-dark);}
   
   .med-list{margin:8px 0 4px;padding-right:20px;font-size:13px;color:var(--text);}
-  .med-list li{margin-bottom:4px;line-height:1.4;}
+  .med-list li{margin-bottom:6px;line-height:1.4;}
 
   .edit-btn-icon{
     background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;color:var(--primary-dark);
@@ -378,7 +377,6 @@ function mapReservationRow(r){
     phone: r.customer_phone || r.phone, 
     items: r.items || [], 
     note: r.note || '', 
-    isPaid: r.is_paid !== undefined ? !!r.is_paid : !!r.isPaid, 
     status: r.status || 'لم يتم التواصل', 
     staffCode: r.staff_code || r.staffCode || '', 
     createdAt: r.created_at || new Date().toISOString() 
@@ -391,7 +389,6 @@ function buildReservationRow(o){
     customer_phone: o.phone, 
     items: o.items, 
     note: o.note, 
-    is_paid: !!o.isPaid, 
     status: o.status, 
     staff_code: o.staffCode 
   }; 
@@ -650,10 +647,10 @@ function renderStockList(){
 }
 
 /* TAB 2: حجوزات العملاء النشطة */
-let reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
+let reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:'', isPaid:false}];
 
 function mountReservationsTab(root){
-  reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
+  reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:'', isPaid:false}];
   root.innerHTML = `
     <div class="card">
       <p class="section-title">تسجيل حجز جديد</p>
@@ -662,19 +659,12 @@ function mountReservationsTab(root){
       <label>رقم الموبايل</label>
       <input type="tel" id="resPhone" placeholder="رقم الموبايل">
       
-      <label>الأصناف المحجوزة</label>
+      <label>الأصناف المحجوزة (حدد كل صنف خالص الثمن أم لا)</label>
       <div id="resItemsWrap"></div>
       <button class="btn ghost" id="resAddRow">+ إضافة صنف آخر</button>
 
       <label>ملاحظة الحجز</label>
       <textarea id="resNote" placeholder="اكتب أي ملاحظات إضافية تخص الحجز..." rows="2"></textarea>
-
-      <div style="margin:12px 0;background:var(--card-bg);padding:10px;border-radius:var(--radius-sm);">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
-          <input type="checkbox" id="resIsPaid" style="width:18px;height:18px;accent-color:var(--primary);">
-          <span>خالص الثمن (مدفوع مقدماً)</span>
-        </label>
-      </div>
 
       <label>كود الزميل (القائم بالإدخال) *</label>
       <input type="text" id="resStaffCode" placeholder="أدخل كودك الوظيفي">
@@ -697,7 +687,7 @@ function mountReservationsTab(root){
     </div>
   `;
   renderResDraftRows();
-  root.querySelector('#resAddRow').onclick = ()=>{ reservationDraftItems.push({itemNo:'',itemDesc:'',qty:'',branch:''}); renderResDraftRows(); };
+  root.querySelector('#resAddRow').onclick = ()=>{ reservationDraftItems.push({itemNo:'',itemDesc:'',qty:'',branch:'',isPaid:false}); renderResDraftRows(); };
   root.querySelector('#resSaveBtn').onclick = onSaveReservation;
   root.querySelector('#resSearch').oninput = (e)=>{ state.search.reservations = e.target.value; renderReservationsList(); };
   root.querySelector('#resFilterStatus').onchange = (e)=>{ state.filters.resStatus = e.target.value; renderReservationsList(); };
@@ -706,8 +696,8 @@ function mountReservationsTab(root){
   };
   root.querySelector('#resExport').onclick = ()=>{
     const data = state.reservations.filter(r=>r.status!=='أرشيف').map((r, idx)=>({
-      'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة الدفع': r.isPaid?'خالص الثمن':'غير خالص الثمن', 'حالة التواصل': r.status,
-      'الأدوية المحجوزة': r.items.map(it=>`${it.itemDesc} (${it.itemNo}) - كمية: ${it.qty} - فرع: ${it.branch||'مباشر'}`).join(' | '),
+      'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة التواصل': r.status,
+      'الأدوية المحجوزة': r.items.map(it=>`${it.itemDesc} (${it.isPaid?'خالص الثمن':'غير خالص'}) - كمية: ${it.qty}`).join(' | '),
       'ملاحظات الحجز': r.note || '',
       'كود الزميل': r.staffCode, 'التاريخ': fmtDate(r.createdAt)
     }));
@@ -720,19 +710,29 @@ function renderResDraftRows(){
   const wrap = document.getElementById('resItemsWrap');
   if(!wrap) return;
   wrap.innerHTML = reservationDraftItems.map((row,i)=>`
-    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin-bottom:8px;">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin-bottom:8px;background:var(--card-bg);">
       <div class="draft-row" style="margin-bottom:6px;">
         <input type="text" placeholder="رقم الصنف" value="${esc(row.itemNo)}" data-i="${i}" data-f="itemNo" class="draftInput resItemNoInp">
         <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="itemDesc" class="draftInput resItemDescInp">
         <input type="number" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="draftInput" style="max-width:70px;">
         ${reservationDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
       </div>
-      <input type="text" placeholder="اسم الفرع اللي هيجي منه الصنف" value="${esc(row.branch)}" data-i="${i}" data-f="branch" class="draftInput">
+      <div class="row" style="gap:6px;">
+        <input type="text" placeholder="اسم الفرع اللي هيجي منه الصنف" value="${esc(row.branch)}" data-i="${i}" data-f="branch" class="draftInput">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0;background:var(--surface);padding:4px 8px;border-radius:6px;border:1px solid var(--border);flex:0 0 auto;">
+          <input type="checkbox" data-i="${i}" data-f="isPaid" class="draftChk" ${row.isPaid?'checked':''} style="width:16px;height:16px;accent-color:var(--primary);">
+          <span>خالص الثمن</span>
+        </label>
+      </div>
     </div>
   `).join('');
 
   wrap.querySelectorAll('.draftInput').forEach(inp=>{
     inp.oninput = ()=>{ reservationDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
+  });
+
+  wrap.querySelectorAll('.draftChk').forEach(chk=>{
+    chk.onchange = ()=>{ reservationDraftItems[chk.dataset.i].isPaid = chk.checked; };
   });
 
   wrap.querySelectorAll('.resItemNoInp').forEach(noInp=>{
@@ -757,10 +757,9 @@ async function onSaveReservation(){
   const name = document.getElementById('resName').value.trim();
   const phone = document.getElementById('resPhone').value.trim();
   const note = document.getElementById('resNote').value.trim();
-  const isPaid = document.getElementById('resIsPaid').checked;
   const staffCode = document.getElementById('resStaffCode').value.trim();
   const items = reservationDraftItems.filter(r=>r.itemNo.trim() || r.itemDesc.trim()).map(r=>({
-    itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:r.qty.trim(), branch:r.branch.trim()
+    itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:r.qty.trim(), branch:r.branch.trim(), isPaid:!!r.isPaid
   }));
 
   if(!name || !phone){ showToast('من فضلك ادخل اسم العميل ورقم الموبايل'); return; }
@@ -773,7 +772,6 @@ async function onSaveReservation(){
     phone, 
     items, 
     note, 
-    isPaid, 
     status: 'لم يتم التواصل', 
     staffCode, 
     createdAt: new Date().toISOString() 
@@ -784,11 +782,11 @@ async function onSaveReservation(){
   
   let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
   msg += `👤 *اسم العميل:* ${name}\n`;
-  msg += `📞 *الموبايل:* ${phone}\n`;
-  msg += `💰 *الحالة المالية:* ${isPaid ? '✅ خالص الثمن' : '⚠️ غير خالص الثمن'}\n\n`;
-  msg += `💊 *الأصناف المحجوزة:*\n`;
+  msg += `📞 *الموبايل:* ${phone}\n\n`;
+  msg += `💊 *الأصناف المحجوزة وحالة الدفع:*\n`;
   items.forEach((it, index) => {
-    msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
+    const paymentStatus = it.isPaid ? '✅ خالص الثمن (مدفوع)' : '⚠️ غير خالص (يُدفع عند الاستلام)';
+    msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}\n   ⬅️ ${paymentStatus}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
   });
   
   if(note) {
@@ -804,9 +802,8 @@ async function onSaveReservation(){
   document.getElementById('resName').value=''; 
   document.getElementById('resPhone').value=''; 
   document.getElementById('resNote').value='';
-  document.getElementById('resIsPaid').checked = false;
   document.getElementById('resStaffCode').value='';
-  reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
+  reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:'', isPaid:false}];
   renderResDraftRows(); 
   renderReservationsList(); 
   
@@ -836,7 +833,6 @@ function renderReservationsList(){
         <div>
           <div class="title">
             <span>#${idx+1} ${esc(r.customerName)}</span>
-            ${r.isPaid ? '<span class="paid-badge">خالص الثمن</span>' : '<span class="unpaid-badge">غير خالص الثمن</span>'}
             <button class="edit-btn-icon" data-id="${r.id}" title="تعديل الحجز">✏️</button>
           </div>
           <div class="sub">📞 موبايل: <a href="tel:${esc(r.phone)}" style="color:var(--primary);font-weight:700;">${esc(r.phone)}</a></div>
@@ -849,7 +845,7 @@ function renderReservationsList(){
         </select>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}</li>`).join('')}
+        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}<br>${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}</li>`).join('')}
       </ul>
       ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
       <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
@@ -890,19 +886,12 @@ function renderReservationsList(){
         <label>اسم العميل</label><input type="text" id="edResName" value="${esc(r.customerName)}">
         <label>رقم الموبايل</label><input type="text" id="edResPhone" value="${esc(r.phone)}">
         <label>ملاحظة الحجز</label><textarea id="edResNote" rows="2">${esc(r.note)}</textarea>
-        <div style="margin:10px 0;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="edResPaid" ${r.isPaid?'checked':''} style="width:18px;height:18px;accent-color:var(--primary);">
-            <span>خالص الثمن</span>
-          </label>
-        </div>
         <label>كود الزميل</label><input type="text" id="edResStaff" value="${esc(r.staffCode)}">
       `, async (modal)=>{
         const patch = {
           customerName: modal.querySelector('#edResName').value.trim(),
           phone: modal.querySelector('#edResPhone').value.trim(),
           note: modal.querySelector('#edResNote').value.trim(),
-          isPaid: modal.querySelector('#edResPaid').checked,
           staffCode: modal.querySelector('#edResStaff').value.trim()
         };
         await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
@@ -963,7 +952,6 @@ function renderArchiveList(){
         <div>
           <div class="title">
             <span>${esc(r.customerName)}</span>
-            ${r.isPaid ? '<span class="paid-badge">خالص الثمن</span>' : '<span class="unpaid-badge">غير خالص الثمن</span>'}
           </div>
           <div class="sub">📞 موبايل: <a href="tel:${esc(r.phone)}" style="color:var(--primary);font-weight:700;">${esc(r.phone)}</a> · التاريخ: ${fmtDate(r.createdAt)}</div>
           <div class="staff-tag">القائم بالإدخال: ${esc(r.staffCode || 'غير محدد')}</div>
@@ -974,7 +962,7 @@ function renderArchiveList(){
         </div>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}</li>`).join('')}
+        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}<br>${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}</li>`).join('')}
       </ul>
       ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
     </div>
@@ -1305,7 +1293,7 @@ function mountMonthlyListSub(root){
       'م': idx+1, 'اسم العميل': m.name, 'الموبايل': m.phone, 'النوع': m.isContract?'تعاقد':'عادي',
       'يوم الاستحقاق': m.dueDay||'-', 'الشركة': m.companyName||'-', 'رقم الكارنيه': m.cardNo||'-',
       'الأدوية': m.items.map(it=>`${it.name} (${it.qty} - ${it.freq})`).join(' | '),
-      'كود الزميل': m.staffCode, 'تاريخ الإدخال': fmtDate(m.createdAt)
+      'كود الزميل': m.staffCode, 'تاريخ الإضافة': fmtDate(m.createdAt)
     }));
     exportToExcel('عملاء_الصرف_الشهري', data);
   };
