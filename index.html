@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - النسخة المستقرة المحدثة</title>
+<title>لوحة تحكم الصيدلية - النسخة مع خيارات الحذف</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -229,7 +229,7 @@
 <div id="toast"></div>
 
 <script>
-/* ================= SUPABASE & ROBUST LOCAL SYNC CONFIG ================= */
+/* ================= SUPABASE & LOCAL SYNC CONFIG ================= */
 const SUPABASE_URL = 'https://bgcttovuwvmrjfufqinv.supabase.co/rest/v1/';
 const SUPABASE_KEY = 'sb_publishable_yy0_ZA7bnwENS6BHO6oaIQ_CMVriKnb';
 
@@ -250,7 +250,6 @@ async function sbGet(table){
     localStorage.setItem('ph_cache_'+table, JSON.stringify(data));
     return data;
   } catch(e) {
-    // العودة للذاكرة المحلية في حال تعذر الاتصال بالسحابة لمنع أي توقف
     return JSON.parse(localStorage.getItem('ph_cache_'+table) || '[]');
   }
 }
@@ -262,7 +261,6 @@ async function sbInsert(table, row){
     const data = await res.json();
     return data[0] || row;
   } catch(e) {
-    // الحفظ المحلي التلقائي لضمان عدم ظهور رسالة خطأ نهائياً
     return row;
   }
 }
@@ -626,7 +624,12 @@ function mountReservationsTab(root){
     </div>
 
     <div class="card">
-      <p class="section-title">أرشيف الحجوزات السابقة</p>
+      <div class="section-title">
+        <span>أرشيف الحجوزات السابقة</span>
+        <div class="actions">
+          <button class="btn small danger" id="clearArchiveBtn" style="margin-top:0;">🗑️ تفريغ الأرشيف</button>
+        </div>
+      </div>
       <div class="searchbar"><input type="search" id="arcSearch" placeholder="ابحث في الأرشيف..."></div>
       <div id="arcList"></div>
     </div>
@@ -640,6 +643,21 @@ function mountReservationsTab(root){
     state.reservations = await fetchReservations(); renderReservationsList(); renderArchiveList(); showToast('تم التحديث');
   };
   root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
+  
+  // زر تفريغ الأرشيف بالكامل
+  root.querySelector('#clearArchiveBtn').onclick = async ()=>{
+    const archivedItems = state.reservations.filter(r => r.status === 'أرشيف');
+    if(archivedItems.length === 0){ showToast('الأرشيف فارغ بالفعل'); return; }
+    if(confirm('هل أنت متأكد من حذف جميع الحجوزات المؤرشفة نهائياً؟')){
+      for(let r of archivedItems){
+        await sbDelete('reservations', r.id);
+      }
+      state.reservations = state.reservations.filter(r => r.status !== 'أرشيف');
+      renderArchiveList();
+      showToast('تم تفريغ الأرشيف بالكامل بنجاح');
+    }
+  };
+
   root.querySelector('#resExport').onclick = ()=>{
     const data = state.reservations.filter(r=>r.status!=='أرشيف').map((r, idx)=>({
       'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone, 'حالة الدفع': r.isPaid?'خالص الثمن':'غير خالص الثمن', 'حالة التواصل': r.status,
@@ -884,7 +902,10 @@ function renderArchiveList(){
           </div>
           <div class="sub">تاريخ الحجز: ${fmtDate(r.createdAt)}</div>
         </div>
-        <button class="btn small secondary restoreResBtn" data-id="${r.id}">إعادة للنشطة</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn small secondary restoreResBtn" data-id="${r.id}">استعادة</button>
+          <button class="btn small danger deleteArchivedBtn" data-id="${r.id}" title="حذف العميل">🗑️</button>
+        </div>
       </div>
       <ul class="med-list">
         ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> - كمية: ${esc(it.qty)}</li>`).join('')}
@@ -900,6 +921,19 @@ function renderArchiveList(){
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) { obj.status = 'لم يتم التواصل'; obj.isPaid = false; }
       renderReservationsList(); renderArchiveList(); showToast('تمت إعادة الحجز للحجوزات النشطة');
+    };
+  });
+
+  // زر حذف عميل معين من الأرشيف
+  list.querySelectorAll('.deleteArchivedBtn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.id;
+      if(confirm('هل تريد حذف هذا العميل المؤرشف نهائياً؟')){
+        await sbDelete('reservations', id);
+        state.reservations = state.reservations.filter(x => x.id !== id);
+        renderArchiveList();
+        showToast('تم حذف العميل من الأرشيف بنجاح');
+      }
     };
   });
 }
