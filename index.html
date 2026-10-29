@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - تحديد وحدة الصنف</title>
+<title>لوحة تحكم الصيدلية - النسخة النهائية المحدثة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -790,11 +790,18 @@ async function onSaveReservation(){
   let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
   msg += `👤 *اسم العميل:* ${name}\n`;
   msg += `📞 *الموبايل:* ${phone}\n\n`;
-  msg += `💊 *الأصناف المحجوزة وحالة الدفع:*\n`;
+  msg += `💊 *الأصناف المحجوزة:*\n`;
   items.forEach((it, index) => {
     const paymentStatus = it.isPaid ? '✅ خالص الثمن (مدفوع)' : '⚠️ غير خالص (يُدفع عند الاستلام)';
     const qtyText = (it.qty || '1') + ' ' + (it.unit || 'علبة');
-    msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${qtyText}\n   ⬅️ ${paymentStatus}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
+    
+    // التنسيق المطلوب: الكمية والوحدة في سطر واحد ورا بعض
+    msg += `\n📌 *${index + 1}. ${it.itemDesc}* (كود: ${it.itemNo || 'بدون'})\n`;
+    msg += `   • الكمية: ${qtyText}\n`;
+    msg += `   • الحالة: ${paymentStatus}\n`;
+    if(it.branch) {
+      msg += `   • الفرع: ${it.branch}\n`;
+    }
   });
   
   if(note) {
@@ -853,7 +860,13 @@ function renderReservationsList(){
         </select>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)} ${esc(it.unit||'علبة')}</b> ${it.branch? '· فرع: '+esc(it.branch):''}<br>${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}</li>`).join('')}
+        ${r.items.map(it=>`
+          <li style="margin-bottom:8px;">
+            <b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)})<br>
+            <span style="font-size:12px;color:var(--muted);">• الكمية: ${esc(it.qty)} ${esc(it.unit||'علبة')}${it.branch? ' · فرع: '+esc(it.branch):''}</span><br>
+            ${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}
+          </li>
+        `).join('')}
       </ul>
       ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
       <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
@@ -970,7 +983,13 @@ function renderArchiveList(){
         </div>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)} ${esc(it.unit||'علبة')}</b> ${it.branch? '· فرع: '+esc(it.branch):''}<br>${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}</li>`).join('')}
+        ${r.items.map(it=>`
+          <li style="margin-bottom:8px;">
+            <b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)})<br>
+            <span style="font-size:12px;color:var(--muted);">• الكمية: ${esc(it.qty)} ${esc(it.unit||'علبة')}${it.branch? ' · فرع: '+esc(it.branch):''}</span><br>
+            ${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}
+          </li>
+        `).join('')}
       </ul>
       ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
     </div>
@@ -1301,7 +1320,7 @@ function mountMonthlyListSub(root){
       'م': idx+1, 'اسم العميل': m.name, 'الموبايل': m.phone, 'النوع': m.isContract?'تعاقد':'عادي',
       'يوم الاستحقاق': m.dueDay||'-', 'الشركة': m.companyName||'-', 'رقم الكارنيه': m.cardNo||'-',
       'الأدوية': m.items.map(it=>`${it.name} (${it.qty} - ${it.freq})`).join(' | '),
-      'كود الزميل': m.staffCode, 'تاريخ الإدخال': fmtDate(m.createdAt)
+      'كود الزميل': m.staffCode, 'تاريخ الإضافة': fmtDate(m.createdAt)
     }));
     exportToExcel('عملاء_الصرف_الشهري', data);
   };
