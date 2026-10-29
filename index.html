@@ -1299,4 +1299,14 @@ async function initApp(){
     ]);
     state.stock = stock;
     state.reservations = reservations;
-    state.monthly
+    state.monthly = monthly;
+    renderActiveTab();
+  }catch(e){
+    renderActiveTab();
+  }
+}
+
+initApp();
+</script>
+</body>
+</html>
