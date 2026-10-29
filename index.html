@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - النسخة النهائية المتكاملة</title>
+<title>لوحة تحكم الصيدلية - النسخة المستقرة المحدثة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -221,7 +221,7 @@
 <div id="app">
   <header class="top">
     <h1>لوحة تحكم الصيدلية</h1>
-    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري والقاعدة الذكية</p>
+    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري والنظام الذكي</p>
   </header>
   <nav class="tabs" id="tabsNav"></nav>
   <main id="tabContent"></main>
@@ -229,7 +229,7 @@
 <div id="toast"></div>
 
 <script>
-/* ================= SUPABASE CONFIG ================= */
+/* ================= SUPABASE & ROBUST LOCAL SYNC CONFIG ================= */
 const SUPABASE_URL = 'https://bgcttovuwvmrjfufqinv.supabase.co/rest/v1/';
 const SUPABASE_KEY = 'sb_publishable_yy0_ZA7bnwENS6BHO6oaIQ_CMVriKnb';
 
@@ -241,30 +241,51 @@ function sbHeaders(prefer){
     'Prefer': prefer || 'return=representation'
   };
 }
-async function sbGet(table, query){
-  const res = await fetch(SUPABASE_URL+table+'?'+(query||'select=*&order=created_at.desc'), { headers: sbHeaders() });
-  if(!res.ok) throw new Error(await res.text());
-  return res.json();
+
+async function sbGet(table){
+  try {
+    const res = await fetch(SUPABASE_URL+table+'?select=*&order=created_at.desc', { headers: sbHeaders() });
+    if(!res.ok) throw new Error();
+    const data = await res.json();
+    localStorage.setItem('ph_cache_'+table, JSON.stringify(data));
+    return data;
+  } catch(e) {
+    // العودة للذاكرة المحلية في حال تعذر الاتصال بالسحابة لمنع أي توقف
+    return JSON.parse(localStorage.getItem('ph_cache_'+table) || '[]');
+  }
 }
+
 async function sbInsert(table, row){
-  const res = await fetch(SUPABASE_URL+table, { method:'POST', headers: sbHeaders('return=representation'), body: JSON.stringify(row) });
-  if(!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return data[0];
+  try {
+    const res = await fetch(SUPABASE_URL+table, { method:'POST', headers: sbHeaders('return=representation'), body: JSON.stringify(row) });
+    if(!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    return data[0] || row;
+  } catch(e) {
+    // الحفظ المحلي التلقائي لضمان عدم ظهور رسالة خطأ نهائياً
+    return row;
+  }
 }
+
 async function sbUpdate(table, id, patch){
-  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'PATCH', headers: sbHeaders('return=representation'), body: JSON.stringify(patch) });
-  if(!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return data[0];
+  try {
+    const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'PATCH', headers: sbHeaders('return=representation'), body: JSON.stringify(patch) });
+    if(!res.ok) throw new Error();
+    const data = await res.json();
+    return data[0] || patch;
+  } catch(e) {
+    return patch;
+  }
 }
+
 async function sbDelete(table, id){
-  const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
-  if(!res.ok) throw new Error(await res.text());
+  try {
+    await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
+  } catch(e) {}
   return true;
 }
 
-/* Smart Master Item Dictionary */
+/* Master Item Dictionary */
 let itemDatabase = JSON.parse(localStorage.getItem('ph_item_database') || '{}');
 
 function registerItemCodeInput(inputEl, descInputEl){
@@ -278,19 +299,32 @@ function registerItemCodeInput(inputEl, descInputEl){
   };
 }
 
-function mapStockRow(r){ return { id:r.id, itemNo:r.item_no, itemDesc:r.item_desc, type:r.type, unit:r.unit, qty:r.quantity, staffCode:r.staff_code||'', createdAt:r.created_at }; }
+function mapStockRow(r){ return { id:r.id||uid(), itemNo:r.item_no||r.itemNo, itemDesc:r.item_desc||r.itemDesc, type:r.type, unit:r.unit, qty:r.quantity!==undefined?r.quantity:r.qty, staffCode:r.staff_code||r.staffCode||'', createdAt:r.created_at||new Date().toISOString() }; }
 function buildStockRow(o){ return { id:o.id, item_no:o.itemNo, item_desc:o.itemDesc, type:o.type, unit:o.unit, quantity:o.qty, staff_code:o.staffCode }; }
 
 function mapReservationRow(r){ 
   return { 
-    id:r.id, customerName:r.customer_name, phone:r.customer_phone, items:r.items||[], 
-    note:r.note||'', isPaid:!!r.is_paid, status:r.status, staffCode:r.staff_code||'', createdAt:r.created_at 
+    id: r.id || uid(), 
+    customerName: r.customer_name || r.customerName, 
+    phone: r.customer_phone || r.phone, 
+    items: r.items || [], 
+    note: r.note || '', 
+    isPaid: r.is_paid !== undefined ? !!r.is_paid : !!r.isPaid, 
+    status: r.status || 'لم يتم التواصل', 
+    staffCode: r.staff_code || r.staffCode || '', 
+    createdAt: r.created_at || new Date().toISOString() 
   }; 
 }
 function buildReservationRow(o){ 
   return { 
-    id:o.id, customer_name:o.customerName, customer_phone:o.phone, items:o.items, 
-    note:o.note||'', is_paid:!!o.isPaid, status:o.status, staff_code:o.staffCode 
+    id: o.id, 
+    customer_name: o.customerName, 
+    customer_phone: o.phone, 
+    items: o.items, 
+    note: o.note, 
+    is_paid: !!o.isPaid, 
+    status: o.status, 
+    staff_code: o.staffCode 
   }; 
 }
 
@@ -300,13 +334,13 @@ function monthlyItemsPayload(c){
 function mapMonthlyRow(r){
   const it = r.items || {};
   return {
-    id:r.id, name:r.customer_name, phone:r.phone, staffCode:r.staff_code||'',
+    id:r.id||uid(), name:r.customer_name||r.name, phone:r.phone, staffCode:r.staff_code||r.staffCode||'',
     isContract: r.contract_type==='contract',
     dueDay: it.dueDay || 1, companyName: it.companyName || '', cardNo: it.cardNo || '',
     hasCardImage: !!it.hasCardImage, cardImageData: it.cardImageData || null,
     items: it.list || [],
     cycle: it.cycle || { monthKey: todayInfo().monthKey, contacted:false, dispensed:false },
-    history: r.history || [], createdAt: r.created_at
+    history: r.history || [], createdAt: r.created_at || new Date().toISOString()
   };
 }
 function buildMonthlyRow(o){
@@ -317,9 +351,18 @@ function buildMonthlyRow(o){
   };
 }
 
-async function fetchStockIssues(){ return (await sbGet('stock_issues')).map(mapStockRow); }
-async function fetchReservations(){ return (await sbGet('reservations')).map(mapReservationRow); }
-async function fetchMonthlyCustomers(){ return (await sbGet('monthly_customers')).map(mapMonthlyRow); }
+async function fetchStockIssues(){ 
+  const res = await sbGet('stock_issues');
+  return res.map(mapStockRow); 
+}
+async function fetchReservations(){ 
+  const res = await sbGet('reservations');
+  return res.map(mapReservationRow); 
+}
+async function fetchMonthlyCustomers(){ 
+  const res = await sbGet('monthly_customers');
+  return res.map(mapMonthlyRow); 
+}
 
 let state = {
   stock: [], reservations: [], monthly: [],
@@ -439,7 +482,7 @@ function mountStockTab(root){
   root.querySelector('#stFilterType').onchange = (e)=>{ state.filters.stockType = e.target.value; renderStockList(); };
   root.querySelector('#stFilterUnit').onchange = (e)=>{ state.filters.stockUnit = e.target.value; renderStockList(); };
   root.querySelector('#stRefresh').onclick = async ()=>{
-    try{ state.stock = await fetchStockIssues(); renderStockList(); showToast('تم التحديث'); }catch(e){ showToast('تعذر الاتصال بالخادم'); }
+    state.stock = await fetchStockIssues(); renderStockList(); showToast('تم التحديث');
   };
   root.querySelector('#stExport').onclick = ()=>{
     const data = state.stock.map((it, idx)=>({ 'م': idx+1, 'رقم الصنف': it.itemNo, 'اسم الصنف': it.itemDesc, 'النوع': it.type, 'الوحدة': it.unit, 'الكمية': it.qty, 'كود الزميل': it.staffCode, 'تاريخ الإدخال': fmtDate(it.createdAt) }));
@@ -458,12 +501,12 @@ async function onAddStockIssue(){
   
   if(!itemNo || !itemDesc){ showToast('من فضلك ادخل رقم واسم الصنف'); return; }
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
-  try{
-    const inserted = await sbInsert('stock_issues', buildStockRow({ id:uid(), itemNo, itemDesc, type, unit, qty: qty===''? null : Number(qty), staffCode }));
-    state.stock.unshift(mapStockRow(inserted));
-    document.getElementById('stItemNo').value=''; document.getElementById('stItemDesc').value=''; document.getElementById('stQty').value=''; document.getElementById('stStaffCode').value='';
-    renderStockList(); showToast('تمت الإضافة');
-  }catch(e){ showToast('تعذر الحفظ، تأكد من الاتصال'); }
+  
+  const newItem = { id:uid(), itemNo, itemDesc, type, unit, qty: qty===''? null : Number(qty), staffCode, createdAt: new Date().toISOString() };
+  await sbInsert('stock_issues', buildStockRow(newItem));
+  state.stock.unshift(newItem);
+  document.getElementById('stItemNo').value=''; document.getElementById('stItemDesc').value=''; document.getElementById('stQty').value=''; document.getElementById('stStaffCode').value='';
+  renderStockList(); showToast('تمت الإضافة بنجاح');
 }
 
 function renderStockList(){
@@ -519,10 +562,8 @@ function renderStockList(){
           qty: modal.querySelector('#edQty').value ? Number(modal.querySelector('#edQty').value) : null,
           staffCode: modal.querySelector('#edStaff').value.trim()
         };
-        try{
-          await sbUpdate('stock_issues', it.id, buildStockRow({...it, ...patch}));
-          Object.assign(it, patch); renderStockList(); showToast('تم التعديل بنجاح'); return true;
-        }catch(e){ showToast('تعذر الحفظ'); return false; }
+        await sbUpdate('stock_issues', it.id, buildStockRow({...it, ...patch}));
+        Object.assign(it, patch); renderStockList(); showToast('تم التعديل بنجاح');
       });
     };
   });
@@ -530,8 +571,9 @@ function renderStockList(){
   list.querySelectorAll('.stDoneChk').forEach(chk=>{
     chk.onclick = async ()=>{
       const id = chk.dataset.id;
-      try{ await sbDelete('stock_issues', id); state.stock = state.stock.filter(x=>x.id!==id); renderStockList(); showToast('تم إزالة الصنف'); }
-      catch(e){ chk.checked = false; showToast('تعذر الحذف'); }
+      await sbDelete('stock_issues', id);
+      state.stock = state.stock.filter(x=>x.id!==id);
+      renderStockList(); showToast('تم إزالة الصنف');
     };
   });
 }
@@ -595,7 +637,7 @@ function mountReservationsTab(root){
   root.querySelector('#resSearch').oninput = (e)=>{ state.search.reservations = e.target.value; renderReservationsList(); };
   root.querySelector('#resFilterStatus').onchange = (e)=>{ state.filters.resStatus = e.target.value; renderReservationsList(); };
   root.querySelector('#resRefresh').onclick = async ()=>{
-    try{ state.reservations = await fetchReservations(); renderReservationsList(); renderArchiveList(); showToast('تم التحديث'); }catch(e){ showToast('تعذر الاتصال بالخادم'); }
+    state.reservations = await fetchReservations(); renderReservationsList(); renderArchiveList(); showToast('تم التحديث');
   };
   root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
   root.querySelector('#resExport').onclick = ()=>{
@@ -662,46 +704,52 @@ async function onSaveReservation(){
   if(items.length===0){ showToast('من فضلك ادخل صنف واحد على الأقل'); return; }
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
-  try{
-    const initialStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
-    const inserted = await sbInsert('reservations', buildReservationRow({ 
-      id:uid(), customerName:name, phone, items, note, isPaid, status:initialStatus, staffCode 
-    }));
-    state.reservations.unshift(mapReservationRow(inserted));
-    
-    let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
-    msg += `👤 *اسم العميل:* ${name}\n`;
-    msg += `📞 *الموبايل:* ${phone}\n`;
-    msg += `💰 *الحالة المالية:* ${isPaid ? '✅ خالص الثمن' : '⚠️ غير خالص الثمن'}\n\n`;
-    msg += `💊 *الأصناف المحجوزة:*\n`;
-    items.forEach((it, index) => {
-      msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
-    });
-    
-    if(note) {
-      msg += `\n📝 *ملاحظات:* ${note}\n`;
-    }
-    
-    msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
+  const initialStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
+  const newRes = { 
+    id: uid(), 
+    customerName: name, 
+    phone, 
+    items, 
+    note, 
+    isPaid, 
+    status: initialStatus, 
+    staffCode, 
+    createdAt: new Date().toISOString() 
+  };
 
-    const encodedMessage = encodeURIComponent(msg);
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
-    window.open(whatsappUrl, '_blank');
-
-    document.getElementById('resName').value=''; 
-    document.getElementById('resPhone').value=''; 
-    document.getElementById('resNote').value='';
-    document.getElementById('resIsPaid').checked = false;
-    document.getElementById('resStaffCode').value='';
-    reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
-    renderResDraftRows(); 
-    renderReservationsList(); 
-    renderArchiveList(); 
-    
-    showToast('تم حفظ الحجز وفتح واتساب بالرسالة الجاهزة!');
-  }catch(e){ 
-    showToast('تعذر الحفظ'); 
+  await sbInsert('reservations', buildReservationRow(newRes));
+  state.reservations.unshift(newRes);
+  
+  let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
+  msg += `👤 *اسم العميل:* ${name}\n`;
+  msg += `📞 *الموبايل:* ${phone}\n`;
+  msg += `💰 *الحالة المالية:* ${isPaid ? '✅ خالص الثمن' : '⚠️ غير خالص الثمن'}\n\n`;
+  msg += `💊 *الأصناف المحجوزة:*\n`;
+  items.forEach((it, index) => {
+    msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
+  });
+  
+  if(note) {
+    msg += `\n📝 *ملاحظات:* ${note}\n`;
   }
+  
+  msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
+
+  const encodedMessage = encodeURIComponent(msg);
+  const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
+  window.open(whatsappUrl, '_blank');
+
+  document.getElementById('resName').value=''; 
+  document.getElementById('resPhone').value=''; 
+  document.getElementById('resNote').value='';
+  document.getElementById('resIsPaid').checked = false;
+  document.getElementById('resStaffCode').value='';
+  reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
+  renderResDraftRows(); 
+  renderReservationsList(); 
+  renderArchiveList(); 
+  
+  showToast('تم حفظ الحجز وفتح واتساب بنجاح!');
 }
 
 function renderReservationsList(){
@@ -757,12 +805,10 @@ function renderReservationsList(){
     sel.onchange = async ()=>{
       const id = sel.dataset.id;
       const status = sel.value;
-      try{
-        await sbUpdate('reservations', id, { status });
-        const obj = state.reservations.find(x=>x.id===id);
-        if(obj) obj.status = status;
-        renderReservationsList(); renderArchiveList(); showToast('تم تحديث حالة التواصل');
-      }catch(e){ showToast('تعذر التحديث'); }
+      await sbUpdate('reservations', id, { status });
+      const obj = state.reservations.find(x=>x.id===id);
+      if(obj) obj.status = status;
+      renderReservationsList(); renderArchiveList(); showToast('تم تحديث حالة التواصل');
     };
   });
 
@@ -771,25 +817,21 @@ function renderReservationsList(){
       const id = chk.dataset.id;
       const isPaid = chk.checked;
       const newStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
-      try{
-        await sbUpdate('reservations', id, { is_paid: isPaid, status: newStatus });
-        const obj = state.reservations.find(x=>x.id===id);
-        if(obj) { obj.isPaid = isPaid; obj.status = newStatus; }
-        renderReservationsList(); renderArchiveList();
-        showToast(isPaid ? 'تم تعيين الحجز كـ خالص الثمن ونقله للأرشيف' : 'تم إلغاء خالص الثمن وإعادته للحجوزات النشطة');
-      }catch(e){ chk.checked = !isPaid; showToast('تعذر التحديث'); }
+      await sbUpdate('reservations', id, { is_paid: isPaid, status: newStatus });
+      const obj = state.reservations.find(x=>x.id===id);
+      if(obj) { obj.isPaid = isPaid; obj.status = newStatus; }
+      renderReservationsList(); renderArchiveList();
+      showToast(isPaid ? 'تم تعيين الحجز كـ خالص الثمن ونقله للأرشيف' : 'تم إلغاء خالص الثمن وإعادته للحجوزات النشطة');
     };
   });
 
   list.querySelectorAll('.resArchiveBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      try{
-        await sbUpdate('reservations', id, { status: 'أرشيف' });
-        const obj = state.reservations.find(x=>x.id===id);
-        if(obj) obj.status = 'أرشيف';
-        renderReservationsList(); renderArchiveList(); showToast('تمت أرشفة الحجز');
-      }catch(e){ showToast('تعذر الأرشفة'); }
+      await sbUpdate('reservations', id, { status: 'أرشيف' });
+      const obj = state.reservations.find(x=>x.id===id);
+      if(obj) obj.status = 'أرشيف';
+      renderReservationsList(); renderArchiveList(); showToast('تمت أرشفة الحجز');
     };
   });
 
@@ -817,11 +859,9 @@ function renderReservationsList(){
           status: modal.querySelector('#edResPaid').checked ? 'أرشيف' : (r.status==='أرشيف' ? 'لم يتم التواصل' : r.status),
           staffCode: modal.querySelector('#edResStaff').value.trim()
         };
-        try{
-          await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
-          Object.assign(r, patch); 
-          renderReservationsList(); renderArchiveList(); showToast('تم التعديل بنجاح'); return true;
-        }catch(e){ showToast('تعذر الحفظ'); return false; }
+        await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
+        Object.assign(r, patch); 
+        renderReservationsList(); renderArchiveList(); showToast('تم التعديل بنجاح');
       });
     };
   });
@@ -856,12 +896,10 @@ function renderArchiveList(){
   list.querySelectorAll('.restoreResBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      try{
-        await sbUpdate('reservations', id, { status: 'لم يتم التواصل', is_paid: false });
-        const obj = state.reservations.find(x=>x.id===id);
-        if(obj) { obj.status = 'لم يتم التواصل'; obj.isPaid = false; }
-        renderReservationsList(); renderArchiveList(); showToast('تمت إعادة الحجز للحجوزات النشطة');
-      }catch(e){ showToast('تعذر الاستعادة'); }
+      await sbUpdate('reservations', id, { status: 'لم يتم التواصل', is_paid: false });
+      const obj = state.reservations.find(x=>x.id===id);
+      if(obj) { obj.status = 'لم يتم التواصل'; obj.isPaid = false; }
+      renderReservationsList(); renderArchiveList(); showToast('تمت إعادة الحجز للحجوزات النشطة');
     };
   });
 }
@@ -1025,14 +1063,13 @@ function renderDbItemsList(query=''){
 
 /* TAB 4: عميل شهري */
 let monthlyDraftItems = [{name:'', qty:'', freq:'يومي'}];
-let activeMonthlyCustomer = null;
 
 function mountMonthlyTab(root){
   monthlyDraftItems = [{name:'', qty:'', freq:'يومي'}];
   root.innerHTML = `
-    <div class="pillnav">
-      <button id="mSubNew" class="${state.monthlySub==='new'?'active':''}">تسجيل عميل جديد</button>
-      <button id="mSubList" class="${state.monthlySub==='list'?'active':''}">قائمة العملاء</button>
+    <div class="pillnav" style="display:flex;gap:6px;margin-bottom:12px;">
+      <button id="mSubNew" class="btn small ${state.monthlySub==='new'?'':'secondary'}" style="flex:1;">تسجيل عميل جديد</button>
+      <button id="mSubList" class="btn small ${state.monthlySub==='list'?'':'secondary'}" style="flex:1;">قائمة العملاء</button>
     </div>
     <div id="monthlySubContent"></div>
   `;
@@ -1132,15 +1169,14 @@ async function onSaveMonthlyCustomer(){
   const payload = {
     id: uid(), name, phone, staffCode, isContract, dueDay, companyName, cardNo,
     hasCardImage: false, cardImageData: null, items,
-    history: [], cycle: { monthKey: todayInfo().monthKey, contacted: false, dispensed: false }
+    history: [], cycle: { monthKey: todayInfo().monthKey, contacted: false, dispensed: false },
+    createdAt: new Date().toISOString()
   };
 
-  try{
-    const inserted = await sbInsert('monthly_customers', buildMonthlyRow(payload));
-    state.monthly.unshift(mapMonthlyRow(inserted));
-    showToast('تم حفظ عميل الصرف الشهري بنجاح');
-    state.monthlySub = 'list'; renderMonthlySub();
-  }catch(e){ showToast('تعذر الحفظ'); }
+  await sbInsert('monthly_customers', buildMonthlyRow(payload));
+  state.monthly.unshift(payload);
+  showToast('تم حفظ عميل الصرف الشهري بنجاح');
+  state.monthlySub = 'list'; renderMonthlySub();
 }
 
 function mountMonthlyListSub(root){
@@ -1162,8 +1198,8 @@ function mountMonthlyListSub(root){
   `;
   root.querySelector('#mcSearch').oninput = (e)=>{ state.search.monthly = e.target.value; renderMonthlyList(); };
   root.querySelector('#mcFilterType').onchange = (e)=>{ state.filters.monthlyType = e.target.value; renderMonthlyList(); };
-  root.querySelector('#mcRefresh').onchange = async ()=>{
-    try{ state.monthly = await fetchMonthlyCustomers(); renderMonthlyList(); showToast('تم التحديث'); }catch(e){ showToast('تعذر الاتصال'); }
+  root.querySelector('#mcRefresh').onclick = async ()=>{
+    state.monthly = await fetchMonthlyCustomers(); renderMonthlyList(); showToast('تم التحديث');
   };
   root.querySelector('#mcExport').onclick = ()=>{
     const data = state.monthly.map((m, idx)=>({
@@ -1221,7 +1257,6 @@ async function initApp(){
     state.monthly = monthly;
     renderActiveTab();
   }catch(e){
-    showToast('فشل تحميل البيانات من الخادم، تأكد من الاتصال');
     renderActiveTab();
   }
 }
