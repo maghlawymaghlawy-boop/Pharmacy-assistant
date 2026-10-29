@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - الأرشفة اليدوية فقط</title>
+<title>لوحة تحكم الصيدلية - النسخة النهائية</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -652,7 +652,7 @@ function renderResDraftRows(){
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin-bottom:8px;">
       <div class="draft-row" style="margin-bottom:6px;">
         <input type="text" placeholder="رقم الصنف" value="${esc(row.itemNo)}" data-i="${i}" data-f="itemNo" class="draftInput resItemNoInp">
-        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="itemDesc" class="draftInput resItemDescInp">
+        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="desc" class="draftInput resItemDescInp">
         <input type="number" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="draftInput" style="max-width:70px;">
         ${reservationDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
       </div>
@@ -696,7 +696,6 @@ async function onSaveReservation(){
   if(items.length===0){ showToast('من فضلك ادخل صنف واحد على الأقل'); return; }
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
-  // الحجز الجديد ينزل دائماً في "الحجوزات النشطة"
   const newRes = { 
     id: uid(), 
     customerName: name, 
@@ -748,7 +747,7 @@ function renderReservationsList(){
   if(!list) return;
   const q = state.search.reservations.trim().toLowerCase();
   const items = state.reservations.filter(r=>{
-    if(r.status==='أرشيف') return false; // إخفاء الحجوزات المؤرشفة فقط
+    if(r.status==='أرشيف') return false;
     if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
     if(q){
       const matchClient = r.customerName.toLowerCase().includes(q) || r.phone.includes(q);
@@ -782,11 +781,7 @@ function renderReservationsList(){
         ${r.items.map(it=>`<li><b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)}) - كمية: <b>${esc(it.qty)}</b> ${it.branch? '· فرع: '+esc(it.branch):''}</li>`).join('')}
       </ul>
       ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0;">
-          <input type="checkbox" data-id="${r.id}" class="resPaidToggle" ${r.isPaid?'checked':''} style="width:16px;height:16px;accent-color:var(--primary);">
-          <span>خالص الثمن</span>
-        </label>
+      <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
         <button class="btn small danger resArchiveBtn" data-id="${r.id}">أرشفة الحجز</button>
       </div>
     </div>
@@ -803,20 +798,6 @@ function renderReservationsList(){
     };
   });
 
-  // تفعيل / إلغاء خالص الثمن بدون نقل للحجز للأرشيف تلقائياً
-  list.querySelectorAll('.resPaidToggle').forEach(chk=>{
-    chk.onchange = async ()=>{
-      const id = chk.dataset.id;
-      const isPaid = chk.checked;
-      await sbUpdate('reservations', id, { is_paid: isPaid });
-      const obj = state.reservations.find(x=>x.id===id);
-      if(obj) obj.isPaid = isPaid;
-      renderReservationsList();
-      showToast(isPaid ? 'تم تفعيل: خالص الثمن' : 'تم إلغاء: خالص الثمن');
-    };
-  });
-
-  // الأرشفة اليدوية فقط عبر هذا الزر
   list.querySelectorAll('.resArchiveBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
