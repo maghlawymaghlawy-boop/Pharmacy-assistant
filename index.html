@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - النسخة النهائية</title>
+<title>لوحة تحكم الصيدلية - مع الوضع الليلي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -28,6 +28,26 @@
     --radius:14px;
     --radius-sm:9px;
   }
+
+  /* متغيرات الوضع الليلي */
+  body.dark-mode {
+    --primary:#10B981;
+    --primary-dark:#059669;
+    --primary-light:#064E3B;
+    --bg:#111827;
+    --surface:#1F2937;
+    --card-bg:#374151;
+    --text:#F3F4F6;
+    --muted:#9CA3AF;
+    --danger:#EF4444;
+    --danger-light:#7F1D1D;
+    --success:#10B981;
+    --success-light:#064E3B;
+    --warning:#F59E0B;
+    --warning-light:#78350F;
+    --border:#4B5563;
+  }
+
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
@@ -36,6 +56,7 @@
     color:var(--text);
     min-height:100vh;
     -webkit-tap-highlight-color:transparent;
+    transition: background 0.3s, color 0.3s;
   }
   #app{
     max-width:620px;
@@ -52,9 +73,29 @@
     position:sticky;
     top:0;
     z-index:20;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
   }
   header.top h1{margin:0;font-size:19px;font-weight:800;}
   header.top p{margin:2px 0 0;font-size:12.5px;opacity:.85;font-weight:500;}
+  
+  .night-mode-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
   nav.tabs{
     display:flex;
     overflow-x:auto;
@@ -62,7 +103,7 @@
     padding:10px 10px 0;
     background:var(--primary);
     position:sticky;
-    top:64px;
+    top:74px;
     z-index:19;
     scrollbar-width:none;
   }
@@ -129,7 +170,7 @@
     border-radius:var(--radius-sm);
     font-family:'Cairo',sans-serif;
     font-size:14px;
-    background:#fff;
+    background:var(--surface);
     color:var(--text);
   }
   input:focus,select:focus,textarea:focus{outline:2px solid var(--primary);outline-offset:1px;}
@@ -154,7 +195,7 @@
   }
   .btn.secondary{background:var(--primary-light);color:var(--primary-dark);}
   .btn.ghost{background:transparent;color:var(--primary-dark);border:1px dashed var(--primary);margin-top:8px;}
-  .btn.danger{background:var(--danger);}
+  .btn.danger{background:var(--danger);color:#fff;}
   .btn.small{width:auto;padding:5px 10px;font-size:12px;margin-top:0;}
   .searchbar{margin-bottom:8px;}
   .filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
@@ -195,12 +236,12 @@
     border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;
   }
   .modal-overlay{
-    position:fixed;inset:0;background:rgba(15,25,22,.5);display:flex;align-items:center;
+    position:fixed;inset:0;background:rgba(15,25,22,.6);display:flex;align-items:center;
     justify-content:center;z-index:100;padding:20px;
   }
   .modal-box{
-    background:#fff;border-radius:var(--radius);padding:20px;max-width:420px;width:100%;
-    max-height:90vh;overflow-y:auto;text-align:right;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;max-width:420px;width:100%;
+    max-height:90vh;overflow-y:auto;text-align:right;color:var(--text);
   }
   .modal-box h3{margin-top:0;color:var(--primary-dark);}
   .modal-actions{display:flex;gap:10px;margin-top:16px;}
@@ -209,6 +250,7 @@
     position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--primary-dark);
     color:#fff;padding:10px 18px;border-radius:30px;font-size:13px;font-weight:600;opacity:0;
     pointer-events:none;transition:opacity .25s;z-index:200;max-width:85%;text-align:center;
+    border:1px solid var(--border);
   }
   #toast.show{opacity:1;}
   .staff-tag{font-size:11.5px;font-weight:700;color:var(--primary);background:var(--primary-light);padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block;}
@@ -220,8 +262,11 @@
 <body>
 <div id="app">
   <header class="top">
-    <h1>لوحة تحكم الصيدلية</h1>
-    <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري والنظام الذكي</p>
+    <div>
+      <h1>لوحة تحكم الصيدلية</h1>
+      <p>متابعة الأصناف والحجوزات وعملاء الصرف الشهري والنظام الذكي</p>
+    </div>
+    <button class="night-mode-btn" id="nightModeToggle" title="تبديل الوضع الليلي">🌙 <span id="nightModeText">ليلي</span></button>
   </header>
   <nav class="tabs" id="tabsNav"></nav>
   <main id="tabContent"></main>
@@ -281,6 +326,32 @@ async function sbDelete(table, id){
     await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
   } catch(e) {}
   return true;
+}
+
+/* Night Mode Setup */
+function initNightMode(){
+  const btn = document.getElementById('nightModeToggle');
+  const txt = document.getElementById('nightModeText');
+  const isDark = localStorage.getItem('ph_night_mode') === 'true';
+  
+  if(isDark){
+    document.body.classList.add('dark-mode');
+    txt.textContent = 'نهاري';
+    btn.innerHTML = '☀️ <span id="nightModeText">نهاري</span>';
+  }
+
+  btn.onclick = ()=>{
+    document.body.classList.toggle('dark-mode');
+    const active = document.body.classList.contains('dark-mode');
+    localStorage.setItem('ph_night_mode', active);
+    if(active){
+      btn.innerHTML = '☀️ <span id="nightModeText">نهاري</span>';
+      showToast('تم تفعيل الوضع الليلي');
+    } else {
+      btn.innerHTML = '🌙 <span id="nightModeText">ليلي</span>';
+      showToast('تم تفعيل الوضع العادي');
+    }
+  };
 }
 
 /* Master Item Dictionary */
@@ -652,7 +723,7 @@ function renderResDraftRows(){
     <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;margin-bottom:8px;">
       <div class="draft-row" style="margin-bottom:6px;">
         <input type="text" placeholder="رقم الصنف" value="${esc(row.itemNo)}" data-i="${i}" data-f="itemNo" class="draftInput resItemNoInp">
-        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="desc" class="draftInput resItemDescInp">
+        <input type="text" placeholder="اسم الصنف" value="${esc(row.itemDesc)}" data-i="${i}" data-f="itemDesc" class="draftInput resItemDescInp">
         <input type="number" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="draftInput" style="max-width:70px;">
         ${reservationDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
       </div>
@@ -1234,7 +1305,7 @@ function mountMonthlyListSub(root){
       'م': idx+1, 'اسم العميل': m.name, 'الموبايل': m.phone, 'النوع': m.isContract?'تعاقد':'عادي',
       'يوم الاستحقاق': m.dueDay||'-', 'الشركة': m.companyName||'-', 'رقم الكارنيه': m.cardNo||'-',
       'الأدوية': m.items.map(it=>`${it.name} (${it.qty} - ${it.freq})`).join(' | '),
-      'كود الزميل': m.staffCode, 'تاريخ الإضافة': fmtDate(m.createdAt)
+      'كود الزميل': m.staffCode, 'تاريخ الإدخال': fmtDate(m.createdAt)
     }));
     exportToExcel('عملاء_الصرف_الشهري', data);
   };
@@ -1275,6 +1346,7 @@ function renderMonthlyList(){
 
 /* INITIALIZE APP */
 async function initApp(){
+  initNightMode();
   renderTabsNav();
   try{
     const [stock, reservations, monthly] = await Promise.all([
