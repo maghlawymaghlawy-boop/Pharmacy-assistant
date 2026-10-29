@@ -524,7 +524,7 @@ function mountReservationsTab(root){
 
       <label>كود الزميل (القائم بالإدخال) *</label>
       <input type="text" id="resStaffCode" placeholder="أدخل كودك الوظيفي">
-      <button class="btn" id="resSaveBtn">حفظ الحجز</button>
+      <button class="btn" id="resSaveBtn">حفظ الحجز وإرسال للواتساب</button>
     </div>
 
     <div class="card">
@@ -605,12 +605,44 @@ async function onSaveReservation(){
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
   try{
+    // 1. حفظ الحجز في قاعدة البيانات
     const inserted = await sbInsert('reservations', buildReservationRow({ id:uid(), customerName:name, phone, items, note, status:'لم يتم التواصل', staffCode }));
     state.reservations.unshift(mapReservationRow(inserted));
-    document.getElementById('resName').value=''; document.getElementById('resPhone').value=''; document.getElementById('resNote').value=''; document.getElementById('resStaffCode').value='';
+    
+    // 2. تجهيز نص الرسالة
+    let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
+    msg += `👤 *اسم العميل:* ${name}\n`;
+    msg += `📞 *الموبايل:* ${phone}\n\n`;
+    msg += `💊 *الأصناف المحجوزة:*\n`;
+    items.forEach((it, index) => {
+      msg += `${index + 1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - كمية: ${it.qty || '1'}${it.branch ? ' - فرع: ' + it.branch : ''}\n`;
+    });
+    
+    if(note) {
+      msg += `\n📝 *ملاحظات:* ${note}\n`;
+    }
+    
+    msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
+
+    // 3. فتح واتساب عبر رابط مباشر مع النص الجاهز للصق في صندوق الكتابة
+    const encodedMessage = encodeURIComponent(msg);
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+
+    // تصفير الحقول وتحديث الواجهة
+    document.getElementById('resName').value=''; 
+    document.getElementById('resPhone').value=''; 
+    document.getElementById('resNote').value=''; 
+    document.getElementById('resStaffCode').value='';
     reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', branch:''}];
-    renderResDraftRows(); renderReservationsList(); renderArchiveList(); showToast('تم حفظ الحجز بنجاح');
-  }catch(e){ showToast('تعذر الحفظ'); }
+    renderResDraftRows(); 
+    renderReservationsList(); 
+    renderArchiveList(); 
+    
+    showToast('تم حفظ الحجز وفتح واتساب بالرسالة الجاهزة!');
+  }catch(e){ 
+    showToast('تعذر الحفظ'); 
+  }
 }
 
 function renderReservationsList(){
