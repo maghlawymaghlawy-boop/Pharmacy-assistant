@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>لوحة تحكم الصيدلية - تبويب الأرشيف المنفصل</title>
+<title>لوحة تحكم الصيدلية - الأرشفة اليدوية فقط</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- مكتبة قراءة وتصدير الـ Excel -->
@@ -370,7 +370,7 @@ let state = {
 };
 
 function uid(){ return 'id_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
-function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])[c]); }
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function todayInfo(){ const d = new Date(); return { day:d.getDate(), monthKey: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0') }; }
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -408,7 +408,6 @@ function openEditModal(title, htmlContent, onSave){
   };
 }
 
-/* التبويبات المحدثة لترتيب وتسهيل الوصول */
 const TAB_DEFS = [
   {id:'stock', label:'مشاكل أرصدة الأصناف'},
   {id:'reservations', label:'حجوزات العملاء النشطة'},
@@ -697,7 +696,7 @@ async function onSaveReservation(){
   if(items.length===0){ showToast('من فضلك ادخل صنف واحد على الأقل'); return; }
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
-  const initialStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
+  // الحجز الجديد ينزل دائماً في "الحجوزات النشطة"
   const newRes = { 
     id: uid(), 
     customerName: name, 
@@ -705,7 +704,7 @@ async function onSaveReservation(){
     items, 
     note, 
     isPaid, 
-    status: initialStatus, 
+    status: 'لم يتم التواصل', 
     staffCode, 
     createdAt: new Date().toISOString() 
   };
@@ -741,7 +740,7 @@ async function onSaveReservation(){
   renderResDraftRows(); 
   renderReservationsList(); 
   
-  showToast(isPaid ? 'تم الحفظ وإضافة الحجز للأرشيف مباشرة لأنه خالص الثمن' : 'تم حفظ الحجز وفتح واتساب بنجاح!');
+  showToast('تم حفظ الحجز وضمه للحجوزات النشطة بنجاح!');
 }
 
 function renderReservationsList(){
@@ -749,7 +748,7 @@ function renderReservationsList(){
   if(!list) return;
   const q = state.search.reservations.trim().toLowerCase();
   const items = state.reservations.filter(r=>{
-    if(r.status==='أرشيف') return false;
+    if(r.status==='أرشيف') return false; // إخفاء الحجوزات المؤرشفة فقط
     if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
     if(q){
       const matchClient = r.customerName.toLowerCase().includes(q) || r.phone.includes(q);
@@ -804,26 +803,30 @@ function renderReservationsList(){
     };
   });
 
+  // تفعيل / إلغاء خالص الثمن بدون نقل للحجز للأرشيف تلقائياً
   list.querySelectorAll('.resPaidToggle').forEach(chk=>{
     chk.onchange = async ()=>{
       const id = chk.dataset.id;
       const isPaid = chk.checked;
-      const newStatus = isPaid ? 'أرشيف' : 'لم يتم التواصل';
-      await sbUpdate('reservations', id, { is_paid: isPaid, status: newStatus });
+      await sbUpdate('reservations', id, { is_paid: isPaid });
       const obj = state.reservations.find(x=>x.id===id);
-      if(obj) { obj.isPaid = isPaid; obj.status = newStatus; }
+      if(obj) obj.isPaid = isPaid;
       renderReservationsList();
-      showToast(isPaid ? 'تم تعيين الحجز كـ خالص الثمن ونقله للشاشة المنفصلة للأرشيف' : 'تم إلغاء خالص الثمن وإعادته للحجوزات النشطة');
+      showToast(isPaid ? 'تم تفعيل: خالص الثمن' : 'تم إلغاء: خالص الثمن');
     };
   });
 
+  // الأرشفة اليدوية فقط عبر هذا الزر
   list.querySelectorAll('.resArchiveBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      await sbUpdate('reservations', id, { status: 'أرشيف' });
-      const obj = state.reservations.find(x=>x.id===id);
-      if(obj) obj.status = 'أرشيف';
-      renderReservationsList(); showToast('تم نقل الحجز إلى الأرشيف');
+      if(confirm('هل انتهيت من هذا الحجز وتريد نقله إلى الأرشيف؟')){
+        await sbUpdate('reservations', id, { status: 'أرشيف' });
+        const obj = state.reservations.find(x=>x.id===id);
+        if(obj) obj.status = 'أرشيف';
+        renderReservationsList(); 
+        showToast('تم أرشفة الحجز ونقله لشاشة الأرشيف المنفصلة');
+      }
     };
   });
 
@@ -848,7 +851,6 @@ function renderReservationsList(){
           phone: modal.querySelector('#edResPhone').value.trim(),
           note: modal.querySelector('#edResNote').value.trim(),
           isPaid: modal.querySelector('#edResPaid').checked,
-          status: modal.querySelector('#edResPaid').checked ? 'أرشيف' : (r.status==='أرشيف' ? 'لم يتم التواصل' : r.status),
           staffCode: modal.querySelector('#edResStaff').value.trim()
         };
         await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
@@ -859,7 +861,7 @@ function renderReservationsList(){
   });
 }
 
-/* TAB 3: شاشة أرشفة الحجوزات المنفصلة بالكامل */
+/* TAB 3: شاشة أرشفة الحجوزات المنفصلة */
 function mountArchiveTab(root){
   root.innerHTML = `
     <div class="card">
@@ -929,9 +931,9 @@ function renderArchiveList(){
   list.querySelectorAll('.restoreResBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      await sbUpdate('reservations', id, { status: 'لم يتم التواصل', is_paid: false });
+      await sbUpdate('reservations', id, { status: 'لم يتم التواصل' });
       const obj = state.reservations.find(x=>x.id===id);
-      if(obj) { obj.status = 'لم يتم التواصل'; obj.isPaid = false; }
+      if(obj) { obj.status = 'لم يتم التواصل'; }
       renderArchiveList(); showToast('تمت إعادة الحجز لشاشة الحجوزات النشطة');
     };
   });
