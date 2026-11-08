@@ -465,6 +465,7 @@ function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace
 function todayInfo(){ const d = new Date(); return { day:d.getDate(), monthKey: d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0') }; }
 function showToast(msg){
   const t = document.getElementById('toast');
+  if(!t) return;
   t.textContent = msg; t.classList.add('show');
   clearTimeout(showToast._t); showToast._t = setTimeout(()=>t.classList.remove('show'), 2200);
 }
@@ -509,6 +510,7 @@ const TAB_DEFS = [
 
 function renderTabsNav(){
   const nav = document.getElementById('tabsNav');
+  if(!nav) return;
   nav.innerHTML = TAB_DEFS.map(t=>`<button data-tab="${t.id}" class="${state.activeTab===t.id?'active':''}">${t.label}</button>`).join('');
   nav.querySelectorAll('button').forEach(b=>{
     b.onclick = ()=>{ state.activeTab = b.dataset.tab; renderTabsNav(); renderActiveTab(); };
@@ -517,6 +519,7 @@ function renderTabsNav(){
 
 function renderActiveTab(){
   const el = document.getElementById('tabContent');
+  if(!el) return;
   el.innerHTML = '';
   if(state.activeTab==='stock') mountStockTab(el);
   else if(state.activeTab==='reservations') mountReservationsTab(el);
@@ -1343,17 +1346,13 @@ function renderDbList(){
 /* Initialize App on load */
 async function initApp(){
   initNightMode();
-  showToast('جاري مزامنة البيانات من السحابة لكافة الشاشات...');
   try {
     await Promise.all([
       fetchStockIssues(),
       fetchReservations(),
       fetchMonthlyCustomers()
     ]);
-    showToast('تمت المزامنة السحابية بنجاح');
-  } catch(e) {
-    showToast('تعذر الاتصال بالسحابة، يتم استخدام النسخ المخزنة');
-  }
+  } catch(e) {}
   renderTabsNav();
   renderActiveTab();
 }
