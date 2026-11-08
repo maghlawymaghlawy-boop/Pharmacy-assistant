@@ -196,6 +196,7 @@
   .btn.ghost{background:transparent;color:var(--primary-dark);border:1px dashed var(--primary);margin-top:8px;}
   .btn.danger{background:var(--danger);color:#fff;}
   .btn.small{width:auto;padding:5px 10px;font-size:12px;margin-top:0;}
+  .btn:disabled{opacity:.6;cursor:wait;}
   .searchbar{margin-bottom:8px;}
   .filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
   .filters select{flex:1;min-width:120px;font-size:12.5px;padding:8px 10px;}
@@ -273,7 +274,7 @@
 <div id="toast"></div>
 
 <script>
-/* ================= SUPABASE & LOCAL SYNC CONFIG ================= */
+/* ================= SUPABASE & SYNC CONFIG ================= */
 const SUPABASE_URL = 'https://bgcttovuwvmrjfufqinv.supabase.co/rest/v1/';
 const SUPABASE_KEY = 'sb_publishable_yy0_ZA7bnwENS6BHO6oaIQ_CMVriKnb';
 
@@ -286,44 +287,75 @@ function sbHeaders(prefer){
   };
 }
 
+/* القراءة: لو فشلت نعرض النسخة المخزنة مع تنبيه واضح */
 async function sbGet(table){
   try {
     const res = await fetch(SUPABASE_URL+table+'?select=*&order=created_at.desc', { headers: sbHeaders() });
-    if(!res.ok) throw new Error();
+    if(!res.ok) throw new Error(await res.text());
     const data = await res.json();
     localStorage.setItem('ph_cache_'+table, JSON.stringify(data));
     return data;
   } catch(e) {
+    console.error('sbGet', table, e);
+    showToast('⚠️ تعذر الاتصال بالسيرفر - يتم عرض نسخة قديمة');
     return JSON.parse(localStorage.getItem('ph_cache_'+table) || '[]');
   }
 }
 
+/* الكتابة: لو فشلت نوقف العملية ونظهر الخطأ (بدون إخفاء) */
 async function sbInsert(table, row){
+  let res;
   try {
-    const res = await fetch(SUPABASE_URL+table, { method:'POST', headers: sbHeaders('return=representation'), body: JSON.stringify(row) });
-    if(!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    return data[0] || row;
+    res = await fetch(SUPABASE_URL+table, { method:'POST', headers: sbHeaders('return=representation'), body: JSON.stringify(row) });
   } catch(e) {
-    return row;
+    console.error('sbInsert network', table, e);
+    showToast('❌ لا يوجد اتصال - لم يتم الحفظ على السيرفر');
+    throw e;
   }
+  if(!res.ok){
+    const t = await res.text();
+    console.error('sbInsert', table, t);
+    showToast('❌ فشل الحفظ في السيرفر');
+    throw new Error(t);
+  }
+  const data = await res.json();
+  return data[0] || row;
 }
 
 async function sbUpdate(table, id, patch){
+  let res;
   try {
-    const res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'PATCH', headers: sbHeaders('return=representation'), body: JSON.stringify(patch) });
-    if(!res.ok) throw new Error();
-    const data = await res.json();
-    return data[0] || patch;
+    res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'PATCH', headers: sbHeaders('return=representation'), body: JSON.stringify(patch) });
   } catch(e) {
-    return patch;
+    console.error('sbUpdate network', table, e);
+    showToast('❌ لا يوجد اتصال - لم يتم التعديل على السيرفر');
+    throw e;
   }
+  if(!res.ok){
+    const t = await res.text();
+    console.error('sbUpdate', table, t);
+    showToast('❌ فشل التعديل في السيرفر');
+    throw new Error(t);
+  }
+  const data = await res.json();
+  return data[0] || patch;
 }
 
 async function sbDelete(table, id){
+  let res;
   try {
-    await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
-  } catch(e) {}
+    res = await fetch(SUPABASE_URL+table+'?id=eq.'+encodeURIComponent(id), { method:'DELETE', headers: sbHeaders('return=minimal') });
+  } catch(e) {
+    console.error('sbDelete network', table, e);
+    showToast('❌ لا يوجد اتصال - لم يتم الحذف من السيرفر');
+    throw e;
+  }
+  if(!res.ok){
+    const t = await res.text();
+    console.error('sbDelete', table, t);
+    showToast('❌ فشل الحذف في السيرفر');
+    throw new Error(t);
+  }
   return true;
 }
 
@@ -353,8 +385,52 @@ function initNightMode(){
   };
 }
 
-/* Master Item Dictionary */
+/* ================= Master Item Dictionary (متزامن مع Supabase) ================= */
 let itemDatabase = JSON.parse(localStorage.getItem('ph_item_database') || '{}');
+
+/* تحميل قاعدة الأصناف من السيرفر (على دفعات) وتخزين نسخة محلية للعمل بدون إنترنت */
+async function loadItemCatalog(){
+  try{
+    const step = 1000;
+    let offset = 0;
+    const obj = {};
+    while(true){
+      const res = await fetch(
+        SUPABASE_URL+'items_catalog?select=code,description&order=code.asc&limit='+step+'&offset='+offset,
+        { headers: sbHeaders() }
+      );
+      if(!res.ok) throw new Error(await res.text());
+      const rows = await res.json();
+      rows.forEach(r => { obj[r.code] = r.description; });
+      if(rows.length < step) break;
+      offset += step;
+    }
+    itemDatabase = obj;
+    localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+  }catch(e){
+    console.error('loadItemCatalog', e);
+    showToast('⚠️ تعذر تحميل الأصناف من السيرفر - يتم استخدام النسخة المحلية');
+  }
+}
+
+/* رفع الأصناف إلى السيرفر (إضافة أو تحديث بنفس الكود) */
+async function uploadItemCatalog(obj){
+  const rows = Object.entries(obj).map(([code, description]) => ({ code, description }));
+  for(let i=0; i<rows.length; i+=500){
+    const res = await fetch(SUPABASE_URL+'items_catalog', {
+      method:'POST',
+      headers: sbHeaders('resolution=merge-duplicates,return=minimal'),
+      body: JSON.stringify(rows.slice(i, i+500))
+    });
+    if(!res.ok) throw new Error(await res.text());
+  }
+}
+
+/* حذف كل الأصناف من السيرفر */
+async function clearItemCatalog(){
+  const res = await fetch(SUPABASE_URL+'items_catalog?code=neq.__none__', { method:'DELETE', headers: sbHeaders('return=minimal') });
+  if(!res.ok) throw new Error(await res.text());
+}
 
 function registerItemCodeInput(inputEl, descInputEl){
   if(!inputEl || !descInputEl) return;
@@ -443,7 +519,7 @@ function todayInfo(){ const d = new Date(); return { day:d.getDate(), monthKey: 
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  clearTimeout(showToast._t); showToast._t = setTimeout(()=>t.classList.remove('show'), 2200);
+  clearTimeout(showToast._t); showToast._t = setTimeout(()=>t.classList.remove('show'), 2600);
 }
 function fmtDate(iso){ if(!iso) return ''; return new Date(iso).toLocaleDateString('ar-EG', {year:'numeric',month:'2-digit',day:'2-digit'}); }
 
@@ -471,8 +547,12 @@ function openEditModal(title, htmlContent, onSave){
   document.body.appendChild(overlay);
   overlay.querySelector('#editCancel').onclick = ()=>document.body.removeChild(overlay);
   overlay.querySelector('#editSave').onclick = async ()=>{
-    const success = await onSave(overlay);
-    if(success!==false) document.body.removeChild(overlay);
+    try{
+      const success = await onSave(overlay);
+      if(success!==false) document.body.removeChild(overlay);
+    }catch(e){
+      /* تم عرض رسالة الخطأ - تبقى النافذة مفتوحة لإعادة المحاولة */
+    }
   };
 }
 
@@ -571,7 +651,9 @@ async function onAddStockIssue(){
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
   
   const newItem = { id:uid(), itemNo, itemDesc, type, unit, qty: qty===''? null : Number(qty), staffCode, createdAt: new Date().toISOString() };
-  await sbInsert('stock_issues', buildStockRow(newItem));
+  try{
+    await sbInsert('stock_issues', buildStockRow(newItem));
+  }catch(e){ return; }
   state.stock.unshift(newItem);
   document.getElementById('stItemNo').value=''; document.getElementById('stItemDesc').value=''; document.getElementById('stQty').value=''; document.getElementById('stStaffCode').value='';
   renderStockList(); showToast('تمت الإضافة بنجاح');
@@ -584,7 +666,7 @@ function renderStockList(){
   const items = state.stock.filter(it=>{
     if(state.filters.stockType!=='all' && it.type!==state.filters.stockType) return false;
     if(state.filters.stockUnit!=='all' && it.unit!==state.filters.stockUnit) return false;
-    if(q && !(it.itemNo.toLowerCase().includes(q) || it.itemDesc.toLowerCase().includes(q))) return false;
+    if(q && !(String(it.itemNo||'').toLowerCase().includes(q) || String(it.itemDesc||'').toLowerCase().includes(q))) return false;
     return true;
   });
   if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد مشاكل أرصدة مطابقة حالياً</div>`; return; }
@@ -620,7 +702,6 @@ function renderStockList(){
       `, async (modal)=>{
         const edNoInput = modal.querySelector('#edItemNo');
         const edDescInput = modal.querySelector('#edItemDesc');
-        registerItemCodeInput(edNoInput, edDescInput);
 
         const patch = {
           itemNo: edNoInput.value.trim(),
@@ -633,13 +714,18 @@ function renderStockList(){
         await sbUpdate('stock_issues', it.id, buildStockRow({...it, ...patch}));
         Object.assign(it, patch); renderStockList(); showToast('تم التعديل بنجاح');
       });
+      /* تفعيل الإكمال التلقائي داخل نافذة التعديل */
+      const ov = document.querySelector('.modal-overlay:last-of-type');
+      if(ov) registerItemCodeInput(ov.querySelector('#edItemNo'), ov.querySelector('#edItemDesc'));
     };
   });
 
   list.querySelectorAll('.stDoneChk').forEach(chk=>{
     chk.onclick = async ()=>{
       const id = chk.dataset.id;
-      await sbDelete('stock_issues', id);
+      try{
+        await sbDelete('stock_issues', id);
+      }catch(e){ chk.checked = false; return; }
       state.stock = state.stock.filter(x=>x.id!==id);
       renderStockList(); showToast('تم إزالة الصنف');
     };
@@ -766,7 +852,7 @@ async function onSaveReservation(){
   const note = document.getElementById('resNote').value.trim();
   const staffCode = document.getElementById('resStaffCode').value.trim();
   const items = reservationDraftItems.filter(r=>r.itemNo.trim() || r.itemDesc.trim()).map(r=>({
-    itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:r.qty.trim(), unit:r.unit||'علبة', branch:r.branch.trim(), isPaid:!!r.isPaid
+    itemNo:r.itemNo.trim(), itemDesc:r.itemDesc.trim(), qty:String(r.qty).trim(), unit:r.unit||'علبة', branch:r.branch.trim(), isPaid:!!r.isPaid
   }));
 
   if(!name || !phone){ showToast('من فضلك ادخل اسم العميل ورقم الموبايل'); return; }
@@ -784,7 +870,9 @@ async function onSaveReservation(){
     createdAt: new Date().toISOString() 
   };
 
-  await sbInsert('reservations', buildReservationRow(newRes));
+  try{
+    await sbInsert('reservations', buildReservationRow(newRes));
+  }catch(e){ return; }
   state.reservations.unshift(newRes);
   
   let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
@@ -795,7 +883,6 @@ async function onSaveReservation(){
     const paymentStatus = it.isPaid ? '✅ خالص الثمن (مدفوع)' : '⚠️ غير خالص (يُدفع عند الاستلام)';
     const qtyText = (it.qty || '1') + ' ' + (it.unit || 'علبة');
     
-    // التنسيق المطلوب: الكمية والوحدة في سطر واحد ورا بعض
     msg += `\n📌 *${index + 1}. ${it.itemDesc}* (كود: ${it.itemNo || 'بدون'})\n`;
     msg += `   • الكمية: ${qtyText}\n`;
     msg += `   • الحالة: ${paymentStatus}\n`;
@@ -833,8 +920,8 @@ function renderReservationsList(){
     if(r.status==='أرشيف') return false;
     if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
     if(q){
-      const matchClient = r.customerName.toLowerCase().includes(q) || r.phone.includes(q);
-      const matchItem = r.items.some(it=>it.itemDesc.toLowerCase().includes(q) || it.itemNo.toLowerCase().includes(q));
+      const matchClient = String(r.customerName||'').toLowerCase().includes(q) || String(r.phone||'').includes(q);
+      const matchItem = r.items.some(it=>String(it.itemDesc||'').toLowerCase().includes(q) || String(it.itemNo||'').toLowerCase().includes(q));
       if(!matchClient && !matchItem) return false;
     }
     return true;
@@ -879,7 +966,9 @@ function renderReservationsList(){
     sel.onchange = async ()=>{
       const id = sel.dataset.id;
       const status = sel.value;
-      await sbUpdate('reservations', id, { status });
+      try{
+        await sbUpdate('reservations', id, { status });
+      }catch(e){ renderReservationsList(); return; }
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) obj.status = status;
       renderReservationsList(); showToast('تم تحديث حالة التواصل');
@@ -890,7 +979,9 @@ function renderReservationsList(){
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
       if(confirm('هل انتهيت من هذا الحجز وتريد نقله إلى الأرشيف؟')){
-        await sbUpdate('reservations', id, { status: 'أرشيف' });
+        try{
+          await sbUpdate('reservations', id, { status: 'أرشيف' });
+        }catch(e){ return; }
         const obj = state.reservations.find(x=>x.id===id);
         if(obj) obj.status = 'أرشيف';
         renderReservationsList(); 
@@ -948,10 +1039,12 @@ function mountArchiveTab(root){
     const archivedItems = state.reservations.filter(r => r.status === 'أرشيف');
     if(archivedItems.length === 0){ showToast('الأرشيف فارغ بالفعل'); return; }
     if(confirm('هل أنت متأكد من حذف جميع الحجوزات المؤرشفة نهائياً؟')){
-      for(let r of archivedItems){
-        await sbDelete('reservations', r.id);
-      }
-      state.reservations = state.reservations.filter(r => r.status !== 'أرشيف');
+      try{
+        for(let r of archivedItems){
+          await sbDelete('reservations', r.id);
+          state.reservations = state.reservations.filter(x => x.id !== r.id);
+        }
+      }catch(e){ renderArchiveList(); return; }
       renderArchiveList();
       showToast('تم تفريغ الأرشيف بالكامل بنجاح');
     }
@@ -964,7 +1057,7 @@ function renderArchiveList(){
   const list = document.getElementById('arcList');
   if(!list) return;
   const q = state.search.archive.trim().toLowerCase();
-  const archived = state.reservations.filter(r=> r.status==='أرشيف' && (!q || r.customerName.toLowerCase().includes(q) || r.phone.includes(q)));
+  const archived = state.reservations.filter(r=> r.status==='أرشيف' && (!q || String(r.customerName||'').toLowerCase().includes(q) || String(r.phone||'').includes(q)));
   if(archived.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات مؤرشفة حالياً</div>`; return; }
   
   list.innerHTML = archived.map(r=>`
@@ -998,7 +1091,9 @@ function renderArchiveList(){
   list.querySelectorAll('.restoreResBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      await sbUpdate('reservations', id, { status: 'لم يتم التواصل' });
+      try{
+        await sbUpdate('reservations', id, { status: 'لم يتم التواصل' });
+      }catch(e){ return; }
       const obj = state.reservations.find(x=>x.id===id);
       if(obj) { obj.status = 'لم يتم التواصل'; }
       renderArchiveList(); showToast('تمت إعادة الحجز لشاشة الحجوزات النشطة');
@@ -1009,7 +1104,9 @@ function renderArchiveList(){
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
       if(confirm('هل تريد حذف هذا العميل المؤرشف نهائياً؟')){
-        await sbDelete('reservations', id);
+        try{
+          await sbDelete('reservations', id);
+        }catch(e){ return; }
         state.reservations = state.reservations.filter(x => x.id !== id);
         renderArchiveList();
         showToast('تم حذف العميل من الأرشيف بنجاح');
@@ -1018,13 +1115,13 @@ function renderArchiveList(){
   });
 }
 
-/* TAB 4: قاعدة البيانات والأصناف الذكية */
+/* TAB 4: قاعدة البيانات والأصناف الذكية (متزامنة مع السيرفر) */
 function mountDatabaseTab(root){
   root.innerHTML = `
     <div class="card">
       <p class="section-title">📥 رفع شيت الأصناف (Excel / CSV)</p>
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">
-        اختر ملف شيت الأصناف لتفعيل الإكمال التلقائي الفوري لكود الصنف في جميع أقسام الموقع.
+        اختر ملف شيت الأصناف: يتم رفعه للسيرفر ويظهر تلقائياً على كل الأجهزة، ويفعّل الإكمال التلقائي لكود الصنف في جميع الأقسام.
       </p>
       <input type="file" id="excelFileInp" accept=".xlsx, .xls, .csv">
       <button class="btn" id="uploadExcelBtn">حفظ وتفعيل الأصناف</button>
@@ -1033,18 +1130,19 @@ function mountDatabaseTab(root){
     <div class="card" style="background:var(--primary-light);">
       <p class="section-title">🔄 مزامنة القاعدة بين الأجهزة</p>
       <p style="font-size:12.5px;color:var(--primary-dark);margin-bottom:10px;">
-        قم بتصدير ملف القاعدة ومشاركته مع زملائك أو استيراده هنا لتحديث كل الأجهزة فوراً:
+        القاعدة الآن متزامنة تلقائياً مع السيرفر. يمكنك أيضاً تحديثها يدوياً أو استخدام ملف نسخة احتياطية:
       </p>
+      <button class="btn" id="syncDbNowBtn" style="margin-top:0;margin-bottom:8px;">🔄 تحديث الأصناف من السيرفر الآن</button>
       <div class="row">
-        <button class="btn secondary" id="exportDbJson">📤 تصدير ملف القاعدة</button>
-        <button class="btn secondary" id="importDbJsonBtn">📥 استيراد ملف القاعدة</button>
+        <button class="btn secondary" id="exportDbJson">📤 تصدير نسخة احتياطية</button>
+        <button class="btn secondary" id="importDbJsonBtn">📥 استيراد نسخة احتياطية</button>
         <input type="file" id="importDbFileInp" accept=".json" style="display:none;">
       </div>
     </div>
 
     <div class="card">
       <div class="section-title">
-        <span>الأصناف المسجلة (${Object.keys(itemDatabase).length} صنف)</span>
+        <span id="dbCountTitle">الأصناف المسجلة (${Object.keys(itemDatabase).length} صنف)</span>
         <button class="btn small danger" id="clearDbBtn">حذف القاعدة</button>
       </div>
       <div class="searchbar"><input type="search" id="dbSearch" placeholder="ابحث بكود الصنف أو بالاسم..."></div>
@@ -1052,11 +1150,19 @@ function mountDatabaseTab(root){
     </div>
   `;
 
+  const updateDbCount = ()=>{
+    const el = root.querySelector('#dbCountTitle');
+    if(el) el.textContent = `الأصناف المسجلة (${Object.keys(itemDatabase).length} صنف)`;
+  };
+
   root.querySelector('#uploadExcelBtn').onclick = ()=>{
     const fileInput = root.querySelector('#excelFileInp');
+    const upBtn = root.querySelector('#uploadExcelBtn');
     if(!fileInput.files || !fileInput.files[0]){ showToast('من فضلك اختر ملف أولاً'); return; }
     const reader = new FileReader();
-    reader.onload = (e)=>{
+    reader.onload = async (e)=>{
+      let newItems = {};
+      let count = 0;
       try{
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, {type: 'array'});
@@ -1064,7 +1170,6 @@ function mountDatabaseTab(root){
         const worksheet = workbook.Sheets[firstSheetName];
         const json = XLSX.utils.sheet_to_json(worksheet, {defval:''});
 
-        let count = 0;
         json.forEach(row=>{
           let noKey = Object.keys(row).find(k=>/no|code|رقم|كود/i.test(k));
           let descKey = Object.keys(row).find(k=>/desc|name|اسم|وصف/i.test(k));
@@ -1079,20 +1184,45 @@ function mountDatabaseTab(root){
             const code = String(row[noKey]).trim();
             const desc = String(row[descKey]).trim();
             if(code && desc){
-              itemDatabase[code] = desc;
+              newItems[code] = desc;
               count++;
             }
           }
         });
-
-        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
-        showToast(`تم استيراد ${count} صنف بنجاح وتفعيل الإكمال التلقائي!`);
-        renderDbItemsList();
       }catch(err){
         showToast('حدث خطأ أثناء قراءة الملف');
+        return;
       }
+
+      if(count===0){ showToast('لم يتم العثور على أصناف صالحة في الملف'); return; }
+
+      upBtn.disabled = true;
+      showToast('جاري رفع الأصناف للسيرفر... برجاء الانتظار');
+      try{
+        await uploadItemCatalog(newItems);
+        Object.assign(itemDatabase, newItems);
+        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+        showToast(`تم رفع ${count} صنف ومزامنتها مع كل الأجهزة ✅`);
+      }catch(err){
+        console.error('uploadItemCatalog', err);
+        /* نحتفظ بها محلياً فقط كحل مؤقت مع تنبيه واضح */
+        Object.assign(itemDatabase, newItems);
+        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+        showToast('⚠️ تم الحفظ على هذا الجهاز فقط - فشل الرفع للسيرفر (راجع جدول items_catalog)');
+      }
+      upBtn.disabled = false;
+      updateDbCount();
+      renderDbItemsList(root.querySelector('#dbSearch').value);
     };
     reader.readAsArrayBuffer(fileInput.files[0]);
+  };
+
+  root.querySelector('#syncDbNowBtn').onclick = async ()=>{
+    showToast('جاري تحديث الأصناف من السيرفر...');
+    await loadItemCatalog();
+    updateDbCount();
+    renderDbItemsList(root.querySelector('#dbSearch').value);
+    showToast('تم تحديث الأصناف');
   };
 
   root.querySelector('#exportDbJson').onclick = ()=>{
@@ -1112,24 +1242,46 @@ function mountDatabaseTab(root){
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = (evt)=>{
+    reader.onload = async (evt)=>{
+      let importedObj;
       try{
-        const importedObj = JSON.parse(evt.target.result);
-        itemDatabase = importedObj;
-        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
-        showToast('تم تحديث واستيراد القاعدة بنجاح على هذا الجهاز!');
-        renderDbItemsList();
+        importedObj = JSON.parse(evt.target.result);
+        if(!importedObj || typeof importedObj!=='object' || Array.isArray(importedObj)) throw new Error('bad');
       }catch(err){
         showToast('ملف غير صالح');
+        return;
       }
+      showToast('جاري رفع النسخة للسيرفر...');
+      try{
+        await uploadItemCatalog(importedObj);
+        Object.assign(itemDatabase, importedObj);
+        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+        showToast('تم استيراد القاعدة ومزامنتها مع كل الأجهزة ✅');
+      }catch(err){
+        console.error('importDb upload', err);
+        Object.assign(itemDatabase, importedObj);
+        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+        showToast('⚠️ تم الاستيراد على هذا الجهاز فقط - فشل الرفع للسيرفر');
+      }
+      importFileInp.value = '';
+      updateDbCount();
+      renderDbItemsList();
     };
     reader.readAsText(file);
   };
 
-  root.querySelector('#clearDbBtn').onclick = ()=>{
-    if(confirm('هل أنت متأكد من إفراغ قاعدة الأصناف؟')){
+  root.querySelector('#clearDbBtn').onclick = async ()=>{
+    if(confirm('هل أنت متأكد من إفراغ قاعدة الأصناف من كل الأجهزة؟')){
+      try{
+        await clearItemCatalog();
+      }catch(err){
+        console.error('clearItemCatalog', err);
+        showToast('❌ فشل الحذف من السيرفر');
+        return;
+      }
       itemDatabase = {};
       localStorage.removeItem('ph_item_database');
+      updateDbCount();
       renderDbItemsList();
       showToast('تم إفراغ القاعدة');
     }
@@ -1147,7 +1299,7 @@ function renderDbItemsList(query=''){
   if(!list) return;
   const entries = Object.entries(itemDatabase);
   const q = query.trim().toLowerCase();
-  const filtered = entries.filter(([code, desc])=> !q || code.toLowerCase().includes(q) || desc.toLowerCase().includes(q));
+  const filtered = entries.filter(([code, desc])=> !q || code.toLowerCase().includes(q) || String(desc).toLowerCase().includes(q));
 
   if(filtered.length===0){
     list.innerHTML = `<div class="empty-state">لا توجد أصناف مسجلة حالياً</div>`;
@@ -1187,8 +1339,8 @@ function mountMonthlyTab(root){
     </div>
     <div id="monthlySubContent"></div>
   `;
-  root.querySelector('#mSubNew').onclick = ()=>{ state.monthlySub='new'; renderMonthlySub(); };
-  root.querySelector('#mSubList').onclick = ()=>{ state.monthlySub='list'; renderMonthlySub(); };
+  root.querySelector('#mSubNew').onclick = ()=>{ state.monthlySub='new'; mountMonthlyTab(root); };
+  root.querySelector('#mSubList').onclick = ()=>{ state.monthlySub='list'; mountMonthlyTab(root); };
   renderMonthlySub();
 }
 
@@ -1274,7 +1426,7 @@ async function onSaveMonthlyCustomer(){
   const companyName = document.getElementById('mcCompanyName').value.trim();
   const cardNo = document.getElementById('mcCardNo').value.trim();
 
-  const items = monthlyDraftItems.filter(r=>r.name.trim()).map(r=>({ name:r.name.trim(), qty:r.qty.trim(), freq:r.freq }));
+  const items = monthlyDraftItems.filter(r=>r.name.trim()).map(r=>({ name:r.name.trim(), qty:String(r.qty).trim(), freq:r.freq }));
 
   if(!name || !phone){ showToast('من فضلك ادخل اسم العميل ورقم الموبايل'); return; }
   if(items.length===0){ showToast('من فضلك ادخل دواء واحد على الأقل'); return; }
@@ -1287,10 +1439,15 @@ async function onSaveMonthlyCustomer(){
     createdAt: new Date().toISOString()
   };
 
-  await sbInsert('monthly_customers', buildMonthlyRow(payload));
+  try{
+    await sbInsert('monthly_customers', buildMonthlyRow(payload));
+  }catch(e){ return; }
   state.monthly.unshift(payload);
   showToast('تم حفظ عميل الصرف الشهري بنجاح');
-  state.monthlySub = 'list'; renderMonthlySub();
+  state.monthlySub = 'list';
+  renderMonthlySub();
+  /* تحديث شكل أزرار التبويب الفرعي */
+  renderActiveTab();
 }
 
 function mountMonthlyListSub(root){
@@ -1334,7 +1491,7 @@ function renderMonthlyList(){
   const customers = state.monthly.filter(m=>{
     if(state.filters.monthlyType==='contract' && !m.isContract) return false;
     if(state.filters.monthlyType==='normal' && m.isContract) return false;
-    if(q && !(m.name.toLowerCase().includes(q) || m.phone.includes(q) || (m.companyName && m.companyName.toLowerCase().includes(q)))) return false;
+    if(q && !(String(m.name||'').toLowerCase().includes(q) || String(m.phone||'').includes(q) || (m.companyName && m.companyName.toLowerCase().includes(q)))) return false;
     return true;
   });
 
@@ -1348,7 +1505,7 @@ function renderMonthlyList(){
             <span>#${idx+1} ${esc(m.name)}</span>
             <span class="badge ${m.isContract?'green':'grey'}">${m.isContract?'تعاقد ('+esc(m.companyName||'شركة')+')':'صرف عادي'}</span>
           </div>
-          <div class="sub">📞 موبايل: <a href="tel:${esc(m.phone)}" style="color:var(--primary);font-weight:700;">${esc(m.phone)}</a> ${m.isContract?'· الاستحقاق يوم: <strong>'+m.dueDay+'</strong>':''}</div>
+          <div class="sub">📞 موبايل: <a href="tel:${esc(m.phone)}" style="color:var(--primary);font-weight:700;">${esc(m.phone)}</a> ${m.isContract?'· الاستحقاق يوم: <strong>'+esc(m.dueDay)+'</strong>':''}</div>
           <div class="staff-tag">القائم بالإدخال: ${esc(m.staffCode || 'غير محدد')}</div>
         </div>
       </div>
@@ -1365,15 +1522,15 @@ async function initApp(){
   renderTabsNav();
   try{
     const [stock, reservations, monthly] = await Promise.all([
-      fetchStockIssues(), fetchReservations(), fetchMonthlyCustomers()
+      fetchStockIssues(), fetchReservations(), fetchMonthlyCustomers(), loadItemCatalog()
     ]);
     state.stock = stock;
     state.reservations = reservations;
     state.monthly = monthly;
-    renderActiveTab();
   }catch(e){
-    renderActiveTab();
+    console.error('initApp', e);
   }
+  renderActiveTab();
 }
 
 initApp();
