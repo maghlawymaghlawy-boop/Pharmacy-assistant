@@ -418,16 +418,39 @@ function buildMonthlyRow(o){
 }
 
 async function fetchStockIssues(){ 
-  const res = await sbGet('stock_issues');
-  return res.map(mapStockRow); 
+  try {
+    const res = await sbGet('stock_issues');
+    if(res && Array.isArray(res)){
+      state.stock = res.map(mapStockRow);
+      localStorage.setItem('ph_cache_stock', JSON.stringify(state.stock));
+      return state.stock;
+    }
+  } catch(e) {}
+  return JSON.parse(localStorage.getItem('ph_cache_stock') || '[]').map(mapStockRow);
 }
+
 async function fetchReservations(){ 
-  const res = await sbGet('reservations');
-  return res.map(mapReservationRow); 
+  try {
+    const res = await sbGet('reservations');
+    if(res && Array.isArray(res)){
+      state.reservations = res.map(mapReservationRow);
+      localStorage.setItem('ph_cache_reservations', JSON.stringify(state.reservations));
+      return state.reservations;
+    }
+  } catch(e) {}
+  return JSON.parse(localStorage.getItem('ph_cache_reservations') || '[]').map(mapReservationRow);
 }
+
 async function fetchMonthlyCustomers(){ 
-  const res = await sbGet('monthly_customers');
-  return res.map(mapMonthlyRow); 
+  try {
+    const res = await sbGet('monthly_customers');
+    if(res && Array.isArray(res)){
+      state.monthly = res.map(mapMonthlyRow);
+      localStorage.setItem('ph_cache_monthly', JSON.stringify(state.monthly));
+      return state.monthly;
+    }
+  } catch(e) {}
+  return JSON.parse(localStorage.getItem('ph_cache_monthly') || '[]').map(mapMonthlyRow);
 }
 
 let state = {
@@ -550,7 +573,7 @@ function mountStockTab(root){
   root.querySelector('#stFilterType').onchange = (e)=>{ state.filters.stockType = e.target.value; renderStockList(); };
   root.querySelector('#stFilterUnit').onchange = (e)=>{ state.filters.stockUnit = e.target.value; renderStockList(); };
   root.querySelector('#stRefresh').onclick = async ()=>{
-    state.stock = await fetchStockIssues(); renderStockList(); showToast('تم التحديث');
+    await fetchStockIssues(); renderStockList(); showToast('تم التحديث من السحابة');
   };
   root.querySelector('#stExport').onclick = ()=>{
     const data = state.stock.map((it, idx)=>({ 'م': idx+1, 'رقم الصنف': it.itemNo, 'اسم الصنف': it.itemDesc, 'النوع': it.type, 'الوحدة': it.unit, 'الكمية': it.qty, 'كود الزميل': it.staffCode, 'تاريخ الإدخال': fmtDate(it.createdAt) }));
@@ -572,7 +595,7 @@ async function onAddStockIssue(){
   
   const newItem = { id:uid(), itemNo, itemDesc, type, unit, qty: qty===''? null : Number(qty), staffCode, createdAt: new Date().toISOString() };
   await sbInsert('stock_issues', buildStockRow(newItem));
-  state.stock.unshift(newItem);
+  await fetchStockIssues();
   document.getElementById('stItemNo').value=''; document.getElementById('stItemDesc').value=''; document.getElementById('stQty').value=''; document.getElementById('stStaffCode').value='';
   renderStockList(); showToast('تمت الإضافة بنجاح');
 }
@@ -631,7 +654,7 @@ function renderStockList(){
           staffCode: modal.querySelector('#edStaff').value.trim()
         };
         await sbUpdate('stock_issues', it.id, buildStockRow({...it, ...patch}));
-        Object.assign(it, patch); renderStockList(); showToast('تم التعديل بنجاح');
+        await fetchStockIssues(); renderStockList(); showToast('تم التعديل بنجاح');
       });
     };
   });
@@ -640,7 +663,7 @@ function renderStockList(){
     chk.onclick = async ()=>{
       const id = chk.dataset.id;
       await sbDelete('stock_issues', id);
-      state.stock = state.stock.filter(x=>x.id!==id);
+      await fetchStockIssues();
       renderStockList(); showToast('تم إزالة الصنف');
     };
   });
@@ -692,7 +715,7 @@ function mountReservationsTab(root){
   root.querySelector('#resSearch').oninput = (e)=>{ state.search.reservations = e.target.value; renderReservationsList(); };
   root.querySelector('#resFilterStatus').onchange = (e)=>{ state.filters.resStatus = e.target.value; renderReservationsList(); };
   root.querySelector('#resRefresh').onclick = async ()=>{
-    state.reservations = await fetchReservations(); renderReservationsList(); showToast('تم التحديث');
+    await fetchReservations(); renderReservationsList(); showToast('تم التحديث من السحابة');
   };
   root.querySelector('#resExport').onclick = ()=>{
     const data = state.reservations.filter(r=>r.status!=='أرشيف').map((r, idx)=>({
@@ -773,56 +796,37 @@ async function onSaveReservation(){
   if(items.length===0){ showToast('من فضلك ادخل صنف واحد على الأقل'); return; }
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
-  const newRes = { 
-    id: uid(), 
-    customerName: name, 
-    phone, 
-    items, 
-    note, 
-    status: 'لم يتم التواصل', 
-    staffCode, 
-    createdAt: new Date().toISOString() 
+  const newRes = {
+    id: uid(),
+    customerName: name,
+    phone: phone,
+    items: items,
+    note: note,
+    status: 'لم يتم التواصل',
+    staffCode: staffCode,
+    createdAt: new Date().toISOString()
   };
-
+  
   await sbInsert('reservations', buildReservationRow(newRes));
-  state.reservations.unshift(newRes);
+  await fetchReservations();
   
-  let msg = `🔔 *حجز جديد في الصيدلية*\n\n`;
-  msg += `👤 *اسم العميل:* ${name}\n`;
-  msg += `📞 *الموبايل:* ${phone}\n\n`;
-  msg += `💊 *الأصناف المحجوزة:*\n`;
-  items.forEach((it, index) => {
-    const paymentStatus = it.isPaid ? '✅ خالص الثمن (مدفوع)' : '⚠️ غير خالص (يُدفع عند الاستلام)';
-    const qtyText = (it.qty || '1') + ' ' + (it.unit || 'علبة');
-    
-    // التنسيق المطلوب: الكمية والوحدة في سطر واحد ورا بعض
-    msg += `\n📌 *${index + 1}. ${it.itemDesc}* (كود: ${it.itemNo || 'بدون'})\n`;
-    msg += `   • الكمية: ${qtyText}\n`;
-    msg += `   • الحالة: ${paymentStatus}\n`;
-    if(it.branch) {
-      msg += `   • الفرع: ${it.branch}\n`;
-    }
-  });
-  
-  if(note) {
-    msg += `\n📝 *ملاحظات:* ${note}\n`;
-  }
-  
-  msg += `\n👨‍💻 *القائم بالإدخال:* ${staffCode}`;
-
-  const encodedMessage = encodeURIComponent(msg);
-  const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
-  window.open(whatsappUrl, '_blank');
-
-  document.getElementById('resName').value=''; 
-  document.getElementById('resPhone').value=''; 
-  document.getElementById('resNote').value='';
-  document.getElementById('resStaffCode').value='';
+  document.getElementById('resName').value = '';
+  document.getElementById('resPhone').value = '';
+  document.getElementById('resNote').value = '';
+  document.getElementById('resStaffCode').value = '';
   reservationDraftItems = [{itemNo:'', itemDesc:'', qty:'', unit:'علبة', branch:'', isPaid:false}];
-  renderResDraftRows(); 
-  renderReservationsList(); 
+  renderResDraftRows();
+  renderReservationsList();
   
-  showToast('تم حفظ الحجز وضمه للحجوزات النشطة بنجاح!');
+  const itemsText = items.map((it, i) => `${i+1}. *${it.itemDesc}* (رقم: ${it.itemNo || 'بدون'}) - الكمية: ${it.qty || '1'} ${it.unit} ${it.branch ? 'من فرع: '+it.branch : ''} ${it.isPaid ? '✅ مدفوع' : '❌ غير مدفوع'}`).join('\n');
+  const waMsg = `مرحباً بك يا استاذ/ة *${name}* 🩺\n\nنحيطك علماً بأنه تم تسجيل أصناف حجزك في الصيدلية:\n${itemsText}\n\n${note ? 'ملاحظة: '+note+'\n' : ''}\nنتمنى لك دوام الصحة والعافية!`;
+  const cleanPhone = phone.replace(/\D/g,'');
+  const waUrl = `https://wa.me/2${cleanPhone}?text=`+encodeURIComponent(waMsg);
+  
+  showToast('تم حفظ الحجز بنجاح وجاهز للإرسال عبر واتساب');
+  if(confirm('هل تريد فتح الواتساب لإرسال تفاصيل الحجز للعميل الآن؟')){
+    window.open(waUrl, '_blank');
+  }
 }
 
 function renderReservationsList(){
@@ -833,44 +837,47 @@ function renderReservationsList(){
     if(r.status==='أرشيف') return false;
     if(state.filters.resStatus!=='all' && r.status!==state.filters.resStatus) return false;
     if(q){
-      const matchClient = r.customerName.toLowerCase().includes(q) || r.phone.includes(q);
-      const matchItem = r.items.some(it=>it.itemDesc.toLowerCase().includes(q) || it.itemNo.toLowerCase().includes(q));
-      if(!matchClient && !matchItem) return false;
+      const matchName = r.customerName.toLowerCase().includes(q);
+      const matchPhone = r.phone.toLowerCase().includes(q);
+      const matchItem = r.items.some(i => i.itemDesc.toLowerCase().includes(q) || i.itemNo.toLowerCase().includes(q));
+      if(!matchName && !matchPhone && !matchItem) return false;
     }
     return true;
   });
 
-  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات نشطة حالياً</div>`; return; }
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات نشطة مطابقة حالياً</div>`; return; }
 
   list.innerHTML = items.map((r, idx)=>`
     <div class="item-card">
       <div class="top-row">
         <div>
           <div class="title">
-            <span>#${idx+1} ${esc(r.customerName)}</span>
+            <span>#${idx+1} ${esc(r.customerName)} (${esc(r.phone)})</span>
             <button class="edit-btn-icon" data-id="${r.id}" title="تعديل الحجز">✏️</button>
           </div>
-          <div class="sub">📞 موبايل: <a href="tel:${esc(r.phone)}" style="color:var(--primary);font-weight:700;">${esc(r.phone)}</a></div>
-          <div class="staff-tag">القائم بالإدخال: ${esc(r.staffCode || 'غير محدد')}</div>
+          <div class="sub">تاريخ الحجز: ${fmtDate(r.createdAt)} · القائم بالإدخال: ${esc(r.staffCode || 'غير محدد')}</div>
         </div>
-        <select data-id="${r.id}" class="resStatusSelect badge ${r.status==='تم الرد'?'green':r.status==='تم الالغاء'?'red':'amber'}" style="border:none;cursor:pointer;">
-          <option value="لم يتم التواصل" ${r.status==='لم يتم التواصل'?'selected':''}>لم يتم التواصل</option>
-          <option value="تم الرد" ${r.status==='تم الرد'?'selected':''}>تم الرد</option>
-          <option value="تم الالغاء" ${r.status==='تم الالغاء'?'selected':''}>تم الالغاء</option>
-        </select>
+        <div>
+          <select data-id="${r.id}" class="resStatusSelect" style="font-size:11.5px;padding:4px 8px;border-radius:6px;font-weight:700;">
+            <option value="لم يتم التواصل" ${r.status==='لم يتم التواصل'?'selected':''}>لم يتم التواصل</option>
+            <option value="تم الرد" ${r.status==='تم الرد'?'selected':''}>تم الرد</option>
+            <option value="تم الالغاء" ${r.status==='تم الالغاء'?'selected':''}>تم الالغاء</option>
+          </select>
+        </div>
       </div>
       <ul class="med-list">
         ${r.items.map(it=>`
-          <li style="margin-bottom:8px;">
-            <b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)})<br>
-            <span style="font-size:12px;color:var(--muted);">• الكمية: ${esc(it.qty)} ${esc(it.unit||'علبة')}${it.branch? ' · فرع: '+esc(it.branch):''}</span><br>
-            ${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}
+          <li>
+            ${it.isPaid ? '<span class="paid-badge">خالص الثمن</span>' : '<span class="unpaid-badge">غير خالص</span>'}
+            <strong>${esc(it.itemDesc)}</strong> (رقم: ${esc(it.itemNo || '-')}) - كمية: ${esc(it.qty || '1')} ${esc(it.unit || 'علبة')}
+            ${it.branch ? ' · من فرع: '+esc(it.branch) : ''}
           </li>
         `).join('')}
       </ul>
-      ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
-      <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
-        <button class="btn small danger resArchiveBtn" data-id="${r.id}">أرشفة الحجز</button>
+      ${r.note ? `<div class="note-box">ملاحظة: ${esc(r.note)}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <a href="https://wa.me/2${r.phone.replace(/\D/g,'')}?text=`+encodeURIComponent(`مرحباً استاذ/ة ${r.customerName}، بخصوص حجزك في الصيدلية...`)" target="_blank" class="btn small secondary" style="text-decoration:none;flex:1;">💬 مراسلة واتساب</a>
+        <button class="btn small danger archiveResBtn" data-id="${r.id}" style="flex:0 0 auto;">📦 نقل للأرشيف</button>
       </div>
     </div>
   `).join('');
@@ -878,23 +885,27 @@ function renderReservationsList(){
   list.querySelectorAll('.resStatusSelect').forEach(sel=>{
     sel.onchange = async ()=>{
       const id = sel.dataset.id;
-      const status = sel.value;
-      await sbUpdate('reservations', id, { status });
-      const obj = state.reservations.find(x=>x.id===id);
-      if(obj) obj.status = status;
-      renderReservationsList(); showToast('تم تحديث حالة التواصل');
+      const val = sel.value;
+      const r = state.reservations.find(x=>x.id===id);
+      if(r){
+        r.status = val;
+        await sbUpdate('reservations', id, buildReservationRow(r));
+        await fetchReservations();
+        showToast('تم تحديث حالة الحجز');
+      }
     };
   });
 
-  list.querySelectorAll('.resArchiveBtn').forEach(btn=>{
+  list.querySelectorAll('.archiveResBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      if(confirm('هل انتهيت من هذا الحجز وتريد نقله إلى الأرشيف؟')){
-        await sbUpdate('reservations', id, { status: 'أرشيف' });
-        const obj = state.reservations.find(x=>x.id===id);
-        if(obj) obj.status = 'أرشيف';
-        renderReservationsList(); 
-        showToast('تم أرشفة الحجز ونقله لشاشة الأرشيف المنفصلة');
+      const r = state.reservations.find(x=>x.id===id);
+      if(r){
+        r.status = 'أرشيف';
+        await sbUpdate('reservations', id, buildReservationRow(r));
+        await fetchReservations();
+        renderReservationsList();
+        showToast('تم نقل الحجز إلى الأرشيف');
       }
     };
   });
@@ -903,60 +914,52 @@ function renderReservationsList(){
     btn.onclick = ()=>{
       const r = state.reservations.find(x=>x.id===btn.dataset.id);
       if(!r) return;
-      openEditModal('تعديل الحجز', `
+      openEditModal('تعديل تفاصيل الحجز', `
         <label>اسم العميل</label><input type="text" id="edResName" value="${esc(r.customerName)}">
-        <label>رقم الموبايل</label><input type="text" id="edResPhone" value="${esc(r.phone)}">
+        <label>رقم الموبايل</label><input type="tel" id="edResPhone" value="${esc(r.phone)}">
         <label>ملاحظة الحجز</label><textarea id="edResNote" rows="2">${esc(r.note)}</textarea>
         <label>كود الزميل</label><input type="text" id="edResStaff" value="${esc(r.staffCode)}">
       `, async (modal)=>{
-        const patch = {
-          customerName: modal.querySelector('#edResName').value.trim(),
-          phone: modal.querySelector('#edResPhone').value.trim(),
-          note: modal.querySelector('#edResNote').value.trim(),
-          staffCode: modal.querySelector('#edResStaff').value.trim()
-        };
-        await sbUpdate('reservations', r.id, buildReservationRow({...r, ...patch}));
-        Object.assign(r, patch); 
-        renderReservationsList(); showToast('تم التعديل بنجاح');
+        r.customerName = modal.querySelector('#edResName').value.trim();
+        r.phone = modal.querySelector('#edResPhone').value.trim();
+        r.note = modal.querySelector('#edResNote').value.trim();
+        r.staffCode = modal.querySelector('#edResStaff').value.trim();
+        await sbUpdate('reservations', r.id, buildReservationRow(r));
+        await fetchReservations();
+        renderReservationsList();
+        showToast('تم تعديل الحجز بنجاح');
       });
     };
   });
 }
 
-/* TAB 3: شاشة أرشفة الحجوزات المنفصلة */
+/* TAB 3: أرشيف الحجوزات */
 function mountArchiveTab(root){
   root.innerHTML = `
     <div class="card">
       <div class="section-title">
-        <span>أرشيف الحجوزات المكتملة والسابقة</span>
+        <span>أرشيف الحجوزات السابقة</span>
         <div class="actions">
-          <button class="btn small danger" id="clearArchiveBtn" style="margin-top:0;">🗑️ تفريغ الأرشيف</button>
+          <button class="export-btn" id="arcExport">📊 تصدير للأكسل</button>
           <button class="refresh" id="arcRefresh">⟳ تحديث</button>
         </div>
       </div>
-      <div class="searchbar"><input type="search" id="arcSearch" placeholder="ابحث باسم العميل أو الموبايل في الأرشيف..."></div>
+      <div class="searchbar"><input type="search" id="arcSearch" placeholder="ابحث في الأرشيف باسم العميل أو الصنف..."></div>
       <div id="arcList"></div>
     </div>
   `;
-
   root.querySelector('#arcSearch').oninput = (e)=>{ state.search.archive = e.target.value; renderArchiveList(); };
   root.querySelector('#arcRefresh').onclick = async ()=>{
-    state.reservations = await fetchReservations(); renderArchiveList(); showToast('تم التحديث');
+    await fetchReservations(); renderArchiveList(); showToast('تم التحديث من السحابة');
   };
-
-  root.querySelector('#clearArchiveBtn').onclick = async ()=>{
-    const archivedItems = state.reservations.filter(r => r.status === 'أرشيف');
-    if(archivedItems.length === 0){ showToast('الأرشيف فارغ بالفعل'); return; }
-    if(confirm('هل أنت متأكد من حذف جميع الحجوزات المؤرشفة نهائياً؟')){
-      for(let r of archivedItems){
-        await sbDelete('reservations', r.id);
-      }
-      state.reservations = state.reservations.filter(r => r.status !== 'أرشيف');
-      renderArchiveList();
-      showToast('تم تفريغ الأرشيف بالكامل بنجاح');
-    }
+  root.querySelector('#arcExport').onclick = ()=>{
+    const data = state.reservations.filter(r=>r.status==='أرشيف').map((r, idx)=>({
+      'م': idx+1, 'اسم العميل': r.customerName, 'الموبايل': r.phone,
+      'الأدوية المحجوزة': r.items.map(it=>`${it.itemDesc} (${it.isPaid?'خالص':'غير خالص'})`).join(' | '),
+      'ملاحظات': r.note || '', 'كود الزميل': r.staffCode, 'تاريخ الإنشاء': fmtDate(r.createdAt)
+    }));
+    exportToExcel('أرشيف_الحجوزات', data);
   };
-
   renderArchiveList();
 }
 
@@ -964,419 +967,398 @@ function renderArchiveList(){
   const list = document.getElementById('arcList');
   if(!list) return;
   const q = state.search.archive.trim().toLowerCase();
-  const archived = state.reservations.filter(r=> r.status==='أرشيف' && (!q || r.customerName.toLowerCase().includes(q) || r.phone.includes(q)));
-  if(archived.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات مؤرشفة حالياً</div>`; return; }
-  
-  list.innerHTML = archived.map(r=>`
-    <div class="item-card" style="opacity:0.95;">
+  const items = state.reservations.filter(r=>{
+    if(r.status!=='أرشيف') return false;
+    if(q && !(r.customerName.toLowerCase().includes(q) || r.phone.toLowerCase().includes(q) || r.items.some(i=>i.itemDesc.toLowerCase().includes(q)))) return false;
+    return true;
+  });
+
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد حجوزات مؤرشفة حالياً</div>`; return; }
+
+  list.innerHTML = items.map((r, idx)=>`
+    <div class="item-card" style="opacity:0.85;">
       <div class="top-row">
         <div>
-          <div class="title">
-            <span>${esc(r.customerName)}</span>
-          </div>
-          <div class="sub">📞 موبايل: <a href="tel:${esc(r.phone)}" style="color:var(--primary);font-weight:700;">${esc(r.phone)}</a> · التاريخ: ${fmtDate(r.createdAt)}</div>
-          <div class="staff-tag">القائم بالإدخال: ${esc(r.staffCode || 'غير محدد')}</div>
+          <div class="title"><span>#${idx+1} ${esc(r.customerName)} (${esc(r.phone)})</span></div>
+          <div class="sub">تاريخ الإنشاء: ${fmtDate(r.createdAt)} · القائم بالإدخال: ${esc(r.staffCode || 'غير محدد')}</div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <button class="btn small secondary restoreResBtn" data-id="${r.id}">استعادة</button>
-          <button class="btn small danger deleteArchivedBtn" data-id="${r.id}" title="حذف العميل">🗑️</button>
-        </div>
+        <span class="badge grey">مؤرشف</span>
       </div>
       <ul class="med-list">
-        ${r.items.map(it=>`
-          <li style="margin-bottom:8px;">
-            <b>${esc(it.itemDesc)}</b> (رقم: ${esc(it.itemNo)})<br>
-            <span style="font-size:12px;color:var(--muted);">• الكمية: ${esc(it.qty)} ${esc(it.unit||'علبة')}${it.branch? ' · فرع: '+esc(it.branch):''}</span><br>
-            ${it.isPaid ? '<span class="paid-badge" style="font-size:11px;">خالص الثمن</span>' : '<span class="unpaid-badge" style="font-size:11px;">غير خالص الثمن</span>'}
-          </li>
-        `).join('')}
+        ${r.items.map(it=>`<li><strong>${esc(it.itemDesc)}</strong> - كمية: ${esc(it.qty || '1')} ${esc(it.unit || 'علبة')}</li>`).join('')}
       </ul>
-      ${r.note ? `<div class="note-box">📝 ملاحظة: ${esc(r.note)}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn small secondary restoreResBtn" data-id="${r.id}" style="flex:1;">🔄 استعادة للحجوزات النشطة</button>
+        <button class="btn small danger deleteResBtn" data-id="${r.id}" style="flex:0 0 auto;">🗑️ حذف نهائي</button>
+      </div>
     </div>
   `).join('');
 
   list.querySelectorAll('.restoreResBtn').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = btn.dataset.id;
-      await sbUpdate('reservations', id, { status: 'لم يتم التواصل' });
-      const obj = state.reservations.find(x=>x.id===id);
-      if(obj) { obj.status = 'لم يتم التواصل'; }
-      renderArchiveList(); showToast('تمت إعادة الحجز لشاشة الحجوزات النشطة');
-    };
-  });
-
-  list.querySelectorAll('.deleteArchivedBtn').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = btn.dataset.id;
-      if(confirm('هل تريد حذف هذا العميل المؤرشف نهائياً؟')){
-        await sbDelete('reservations', id);
-        state.reservations = state.reservations.filter(x => x.id !== id);
+      const r = state.reservations.find(x=>x.id===id);
+      if(r){
+        r.status = 'لم يتم التواصل';
+        await sbUpdate('reservations', id, buildReservationRow(r));
+        await fetchReservations();
         renderArchiveList();
-        showToast('تم حذف العميل من الأرشيف بنجاح');
+        showToast('تمت استعادة الحجز');
       }
+    };
+  });
+
+  list.querySelectorAll('.deleteResBtn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!confirm('هل أنت متأكد من حذف هذا الحجز نهائياً؟')) return;
+      const id = btn.dataset.id;
+      await sbDelete('reservations', id);
+      await fetchReservations();
+      renderArchiveList();
+      showToast('تم الحذف النهائي');
     };
   });
 }
 
-/* TAB 4: قاعدة البيانات والأصناف الذكية */
-function mountDatabaseTab(root){
-  root.innerHTML = `
-    <div class="card">
-      <p class="section-title">📥 رفع شيت الأصناف (Excel / CSV)</p>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">
-        اختر ملف شيت الأصناف لتفعيل الإكمال التلقائي الفوري لكود الصنف في جميع أقسام الموقع.
-      </p>
-      <input type="file" id="excelFileInp" accept=".xlsx, .xls, .csv">
-      <button class="btn" id="uploadExcelBtn">حفظ وتفعيل الأصناف</button>
-    </div>
-
-    <div class="card" style="background:var(--primary-light);">
-      <p class="section-title">🔄 مزامنة القاعدة بين الأجهزة</p>
-      <p style="font-size:12.5px;color:var(--primary-dark);margin-bottom:10px;">
-        قم بتصدير ملف القاعدة ومشاركته مع زملائك أو استيراده هنا لتحديث كل الأجهزة فوراً:
-      </p>
-      <div class="row">
-        <button class="btn secondary" id="exportDbJson">📤 تصدير ملف القاعدة</button>
-        <button class="btn secondary" id="importDbJsonBtn">📥 استيراد ملف القاعدة</button>
-        <input type="file" id="importDbFileInp" accept=".json" style="display:none;">
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="section-title">
-        <span>الأصناف المسجلة (${Object.keys(itemDatabase).length} صنف)</span>
-        <button class="btn small danger" id="clearDbBtn">حذف القاعدة</button>
-      </div>
-      <div class="searchbar"><input type="search" id="dbSearch" placeholder="ابحث بكود الصنف أو بالاسم..."></div>
-      <div id="dbItemsList" style="max-height:300px;overflow-y:auto;"></div>
-    </div>
-  `;
-
-  root.querySelector('#uploadExcelBtn').onclick = ()=>{
-    const fileInput = root.querySelector('#excelFileInp');
-    if(!fileInput.files || !fileInput.files[0]){ showToast('من فضلك اختر ملف أولاً'); return; }
-    const reader = new FileReader();
-    reader.onload = (e)=>{
-      try{
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, {defval:''});
-
-        let count = 0;
-        json.forEach(row=>{
-          let noKey = Object.keys(row).find(k=>/no|code|رقم|كود/i.test(k));
-          let descKey = Object.keys(row).find(k=>/desc|name|اسم|وصف/i.test(k));
-
-          if(!noKey || !descKey){
-            const keys = Object.keys(row);
-            noKey = keys[0];
-            descKey = keys[1];
-          }
-
-          if(noKey && descKey && row[noKey]){
-            const code = String(row[noKey]).trim();
-            const desc = String(row[descKey]).trim();
-            if(code && desc){
-              itemDatabase[code] = desc;
-              count++;
-            }
-          }
-        });
-
-        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
-        showToast(`تم استيراد ${count} صنف بنجاح وتفعيل الإكمال التلقائي!`);
-        renderDbItemsList();
-      }catch(err){
-        showToast('حدث خطأ أثناء قراءة الملف');
-      }
-    };
-    reader.readAsArrayBuffer(fileInput.files[0]);
-  };
-
-  root.querySelector('#exportDbJson').onclick = ()=>{
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(itemDatabase));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute("href", dataStr);
-    dlAnchor.setAttribute("download", "pharmacy_items_db.json");
-    document.body.appendChild(dlAnchor);
-    dlAnchor.click();
-    dlAnchor.remove();
-    showToast('تم تصدير ملف القاعدة بنجاح');
-  };
-
-  const importFileInp = root.querySelector('#importDbFileInp');
-  root.querySelector('#importDbJsonBtn').onclick = ()=> importFileInp.click();
-  importFileInp.onchange = (e)=>{
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt)=>{
-      try{
-        const importedObj = JSON.parse(evt.target.result);
-        itemDatabase = importedObj;
-        localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
-        showToast('تم تحديث واستيراد القاعدة بنجاح على هذا الجهاز!');
-        renderDbItemsList();
-      }catch(err){
-        showToast('ملف غير صالح');
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  root.querySelector('#clearDbBtn').onclick = ()=>{
-    if(confirm('هل أنت متأكد من إفراغ قاعدة الأصناف؟')){
-      itemDatabase = {};
-      localStorage.removeItem('ph_item_database');
-      renderDbItemsList();
-      showToast('تم إفراغ القاعدة');
-    }
-  };
-
-  root.querySelector('#dbSearch').oninput = (e)=>{
-    renderDbItemsList(e.target.value);
-  };
-
-  renderDbItemsList();
-}
-
-function renderDbItemsList(query=''){
-  const list = document.getElementById('dbItemsList');
-  if(!list) return;
-  const entries = Object.entries(itemDatabase);
-  const q = query.trim().toLowerCase();
-  const filtered = entries.filter(([code, desc])=> !q || code.toLowerCase().includes(q) || desc.toLowerCase().includes(q));
-
-  if(filtered.length===0){
-    list.innerHTML = `<div class="empty-state">لا توجد أصناف مسجلة حالياً</div>`;
-    return;
-  }
-
-  list.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead>
-        <tr style="background:var(--card-bg);text-align:right;">
-          <th style="padding:8px;border:1px solid var(--border);">الكود (No)</th>
-          <th style="padding:8px;border:1px solid var(--border);">اسم الصنف (Description)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${filtered.slice(0, 100).map(([code, desc])=>`
-          <tr>
-            <td style="padding:6px 8px;border:1px solid var(--border);font-weight:700;">${esc(code)}</td>
-            <td style="padding:6px 8px;border:1px solid var(--border);">${esc(desc)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    ${filtered.length > 100 ? `<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px;">يتم عرض أول 100 صنف فقط من إجمالي ${filtered.length}</div>` : ''}
-  `;
-}
-
-/* TAB 5: عميل شهري */
-let monthlyDraftItems = [{name:'', qty:'', freq:'يومي'}];
+/* TAB 4: عميل شهري */
+let monthlyDraftItems = [{name:'', dose:''}];
 
 function mountMonthlyTab(root){
-  monthlyDraftItems = [{name:'', qty:'', freq:'يومي'}];
+  monthlyDraftItems = [{name:'', dose:''}];
   root.innerHTML = `
-    <div class="pillnav" style="display:flex;gap:6px;margin-bottom:12px;">
-      <button id="mSubNew" class="btn small ${state.monthlySub==='new'?'':'secondary'}" style="flex:1;">تسجيل عميل جديد</button>
-      <button id="mSubList" class="btn small ${state.monthlySub==='list'?'':'secondary'}" style="flex:1;">قائمة العملاء</button>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn ${state.monthlySub==='new'?'':'secondary'}" id="subNewBtn" style="flex:1;margin-top:0;">إضافة عميل جديد</button>
+      <button class="btn ${state.monthlySub==='list'?'':'secondary'}" id="subListBtn" style="flex:1;margin-top:0;">قائمة العملاء والمتابعة</button>
     </div>
-    <div id="monthlySubContent"></div>
+    <div id="monthlySubContainer"></div>
   `;
-  root.querySelector('#mSubNew').onclick = ()=>{ state.monthlySub='new'; renderMonthlySub(); };
-  root.querySelector('#mSubList').onclick = ()=>{ state.monthlySub='list'; renderMonthlySub(); };
-  renderMonthlySub();
+  root.querySelector('#subNewBtn').onclick = ()=>{ state.monthlySub='new'; mountMonthlyTab(root); };
+  root.querySelector('#subListBtn').onclick = ()=>{ state.monthlySub='list'; mountMonthlyTab(root); };
+
+  const subCont = root.querySelector('#monthlySubContainer');
+  if(state.monthlySub==='new') renderMonthlyNewForm(subCont);
+  else renderMonthlyListContainer(subCont);
 }
 
-function renderMonthlySub(){
-  const wrap = document.getElementById('monthlySubContent');
-  if(!wrap) return;
-  wrap.innerHTML = '';
-  if(state.monthlySub==='new') mountMonthlyNewSub(wrap);
-  else mountMonthlyListSub(wrap);
-}
-
-function mountMonthlyNewSub(root){
-  root.innerHTML = `
+function renderMonthlyNewForm(container){
+  container.innerHTML = `
     <div class="card">
-      <p class="section-title">إضافة عميل صرف شهري جديد</p>
-      <label>اسم العميل</label>
-      <input type="text" id="mcName" placeholder="اسم العميل">
-      <label>رقم الموبايل</label>
-      <input type="tel" id="mcPhone" placeholder="رقم الموبايل">
-      
-      <div style="margin:10px 0;">
-        <label><input type="checkbox" id="mcIsContract" style="width:auto;margin-left:6px;"> هل الصرف يتبع تعاقد / شركة؟</label>
+      <p class="section-title">تسجيل عميل صرف شهري جديد</p>
+      <div class="row">
+        <div><label>اسم العميل</label><input type="text" id="mName" placeholder="اسم العميل"></div>
+        <div><label>رقم الموبايل</label><input type="tel" id="mPhone" placeholder="رقم الموبايل"></div>
       </div>
-
-      <div id="mcContractFields" style="display:none;background:var(--card-bg);padding:10px;border-radius:var(--radius-sm);margin-bottom:10px;">
-        <label>يوم الاستحقاق الشهري (1 إلى 31)</label>
-        <input type="number" id="mcDueDay" min="1" max="31" value="1">
-        <label>اسم الشركة / الجهة</label>
-        <input type="text" id="mcCompanyName" placeholder="اسم الشركة المتعاقد معها">
-        <label>رقم الكارنيه</label>
-        <input type="text" id="mcCardNo" placeholder="رقم الكارنيه أو البوليصة">
+      <div class="row">
+        <div><label>نوع العميل</label><select id="mContractType"><option value="contract">تأمين / تعاقد شركة</option><option value="normal">نقدي / حر</option></select></div>
+        <div><label>يوم الاستحقاق الشهري (1-31)</label><input type="number" id="mDueDay" min="1" max="31" value="1"></div>
       </div>
-
+      <div id="contractFields">
+        <label>اسم الشركة أو الجهة</label><input type="text" id="mCompanyName" placeholder="مثال: مصر للتأمين، بتروجيت...">
+        <label>رقم الكرنيه / الكارت</label><input type="text" id="mCardNo" placeholder="رقم الكرنيه">
+        <label>صورة الكرنيه (اختياري)</label><input type="file" id="mCardImg" accept="image/*">
+      </div>
       <label>أدوية الصرف الشهري</label>
-      <div id="mcItemsWrap"></div>
-      <button class="btn ghost" id="mcAddRow">+ إضافة دواء آخر</button>
-
-      <label>كود الزميل (القائم بالإدخال) *</label>
-      <input type="text" id="mcStaffCode" placeholder="أدخل كودك الوظيفي">
-      <button class="btn" id="mcSaveBtn">حفظ عميل الصرف الشهري</button>
+      <div id="mItemsWrap"></div>
+      <button class="btn ghost" id="mAddMedBtn">+ إضافة دواء آخر</button>
+      <label>كود الزميل (القائم بالإدخال) *</label><input type="text" id="mStaffCode" placeholder="أدخل كودك الوظيفي">
+      <button class="btn" id="mSaveBtn">حفظ عميل الصرف الشهري</button>
     </div>
   `;
 
-  const isContractChk = root.querySelector('#mcIsContract');
-  const contractFields = root.querySelector('#mcContractFields');
-  isContractChk.onchange = ()=>{ contractFields.style.display = isContractChk.checked ? 'block':'none'; };
+  const contractTypeSel = container.querySelector('#mContractType');
+  const contractFields = container.querySelector('#contractFields');
+  contractTypeSel.onchange = ()=>{ contractFields.style.display = contractTypeSel.value==='contract' ? 'block' : 'none'; };
 
-  renderMonthlyDraftRows();
-  root.querySelector('#mcAddRow').onclick = ()=>{ monthlyDraftItems.push({name:'',qty:'',freq:'يومي'}); renderMonthlyDraftRows(); };
-  root.querySelector('#mcSaveBtn').onclick = onSaveMonthlyCustomer;
+  renderMonthlyMedRows();
+  container.querySelector('#mAddMedBtn').onclick = ()=>{ monthlyDraftItems.push({name:'',dose:''}); renderMonthlyMedRows(); };
+  container.querySelector('#mSaveBtn').onclick = onSaveMonthlyCustomer;
 }
 
-function renderMonthlyDraftRows(){
-  const wrap = document.getElementById('mcItemsWrap');
+function renderMonthlyMedRows(){
+  const wrap = document.getElementById('mItemsWrap');
   if(!wrap) return;
-  wrap.innerHTML = monthlyDraftItems.map((row,i)=>`
+  wrap.innerHTML = monthlyDraftItems.map((row, i)=>`
     <div class="draft-row" style="margin-bottom:6px;">
-      <input type="text" placeholder="اسم الدواء" value="${esc(row.name)}" data-i="${i}" data-f="name" class="draftInput">
-      <input type="text" placeholder="الكمية" value="${esc(row.qty)}" data-i="${i}" data-f="qty" class="draftInput" style="max-width:70px;">
-      <select data-i="${i}" data-f="freq" class="draftInput" style="max-width:100px;">
-        <option value="يومي" ${row.freq==='يومي'?'selected':''}>يومي</option>
-        <option value="أسبوعي" ${row.freq==='أسبوعي'?'selected':''}>أسبوعي</option>
-        <option value="شهري" ${row.freq==='شهري'?'selected':''}>شهري</option>
-      </select>
+      <input type="text" placeholder="اسم الدواء وصناعته" value="${esc(row.name)}" data-i="${i}" data-f="name" class="mMedInput" style="flex:2;">
+      <input type="text" placeholder="الجرعة (مثال: قرص يومياً)" value="${esc(row.dose)}" data-i="${i}" data-f="dose" class="mMedInput" style="flex:2;">
       ${monthlyDraftItems.length>1 ? `<button class="rm" data-i="${i}">✕</button>` : ''}
     </div>
   `).join('');
-  wrap.querySelectorAll('.draftInput').forEach(inp=>{
+
+  wrap.querySelectorAll('.mMedInput').forEach(inp=>{
     inp.oninput = ()=>{ monthlyDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
-    inp.onchange = ()=>{ monthlyDraftItems[inp.dataset.i][inp.dataset.f] = inp.value; };
   });
   wrap.querySelectorAll('.rm').forEach(btn=>{
-    btn.onclick = ()=>{ monthlyDraftItems.splice(Number(btn.dataset.i),1); renderMonthlyDraftRows(); };
+    btn.onclick = ()=>{ monthlyDraftItems.splice(Number(btn.dataset.i),1); renderMonthlyMedRows(); };
   });
 }
 
 async function onSaveMonthlyCustomer(){
-  const name = document.getElementById('mcName').value.trim();
-  const phone = document.getElementById('mcPhone').value.trim();
-  const staffCode = document.getElementById('mcStaffCode').value.trim();
-  const isContract = document.getElementById('mcIsContract').checked;
-  const dueDay = Number(document.getElementById('mcDueDay').value) || 1;
-  const companyName = document.getElementById('mcCompanyName').value.trim();
-  const cardNo = document.getElementById('mcCardNo').value.trim();
-
-  const items = monthlyDraftItems.filter(r=>r.name.trim()).map(r=>({ name:r.name.trim(), qty:r.qty.trim(), freq:r.freq }));
+  const name = document.getElementById('mName').value.trim();
+  const phone = document.getElementById('mPhone').value.trim();
+  const isContract = document.getElementById('mContractType').value==='contract';
+  const dueDay = Number(document.getElementById('mDueDay').value) || 1;
+  const companyName = isContract ? document.getElementById('mCompanyName').value.trim() : '';
+  const cardNo = isContract ? document.getElementById('mCardNo').value.trim() : '';
+  const staffCode = document.getElementById('mStaffCode').value.trim();
+  const items = monthlyDraftItems.filter(r=>r.name.trim()).map(r=>({ name:r.name.trim(), dose:r.dose.trim() }));
 
   if(!name || !phone){ showToast('من فضلك ادخل اسم العميل ورقم الموبايل'); return; }
   if(items.length===0){ showToast('من فضلك ادخل دواء واحد على الأقل'); return; }
   if(!staffCode){ showToast('من فضلك ادخل كود الزميل القائم بالإدخال'); return; }
 
-  const payload = {
-    id: uid(), name, phone, staffCode, isContract, dueDay, companyName, cardNo,
-    hasCardImage: false, cardImageData: null, items,
-    history: [], cycle: { monthKey: todayInfo().monthKey, contacted: false, dispensed: false },
+  const fileInput = document.getElementById('mCardImg');
+  let cardImageData = null;
+  let hasCardImage = false;
+  if(fileInput && fileInput.files && fileInput.files[0]){
+    hasCardImage = true;
+    cardImageData = await new Promise(resolve=>{
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(fileInput.files[0]);
+    });
+  }
+
+  const newCust = {
+    id: uid(),
+    name, phone, staffCode, isContract,
+    dueDay, companyName, cardNo, hasCardImage, cardImageData,
+    items,
+    cycle: { monthKey: todayInfo().monthKey, contacted:false, dispensed:false },
+    history: [],
     createdAt: new Date().toISOString()
   };
 
-  await sbInsert('monthly_customers', buildMonthlyRow(payload));
-  state.monthly.unshift(payload);
-  showToast('تم حفظ عميل الصرف الشهري بنجاح');
-  state.monthlySub = 'list'; renderMonthlySub();
+  await sbInsert('monthly_customers', buildMonthlyRow(newCust));
+  await fetchMonthlyCustomers();
+  showToast('تم حفظ العميل الشهري بنجاح');
+  state.monthlySub = 'list';
+  renderActiveTab();
 }
 
-function mountMonthlyListSub(root){
-  root.innerHTML = `
+function renderMonthlyListContainer(container){
+  container.innerHTML = `
     <div class="card">
       <div class="section-title">
         <span>قائمة عملاء الصرف الشهري</span>
         <div class="actions">
-          <button class="export-btn" id="mcExport">📊 تصدير إلى Excel</button>
-          <button class="refresh" id="mcRefresh">⟳ تحديث</button>
+          <button class="export-btn" id="mExport">📊 تصدير للأكسل</button>
+          <button class="refresh" id="mRefresh">⟳ تحديث</button>
         </div>
       </div>
-      <div class="searchbar"><input type="search" id="mcSearch" placeholder="ابحث باسم العميل أو الموبايل أو الشركة..."></div>
+      <div class="searchbar"><input type="search" id="mSearch" placeholder="ابحث باسم العميل أو الشركة..."></div>
       <div class="filters">
-        <select id="mcFilterType"><option value="all">كل العملاء</option><option value="contract">تعاقدات / شركات</option><option value="normal">عادي</option></select>
+        <select id="mFilterType"><option value="all">كل العملاء</option><option value="contract">تعاقد / تأمين</option><option value="normal">نقدي</option></select>
       </div>
-      <div id="mcList"></div>
+      <div id="mList"></div>
     </div>
   `;
-  root.querySelector('#mcSearch').oninput = (e)=>{ state.search.monthly = e.target.value; renderMonthlyList(); };
-  root.querySelector('#mcFilterType').onchange = (e)=>{ state.filters.monthlyType = e.target.value; renderMonthlyList(); };
-  root.querySelector('#mcRefresh').onclick = async ()=>{
-    state.monthly = await fetchMonthlyCustomers(); renderMonthlyList(); showToast('تم التحديث');
+  container.querySelector('#mSearch').oninput = (e)=>{ state.search.monthly = e.target.value; renderMonthlyList(); };
+  container.querySelector('#mFilterType').onchange = (e)=>{ state.filters.monthlyType = e.target.value; renderMonthlyList(); };
+  container.querySelector('#mRefresh').onclick = async ()=>{
+    await fetchMonthlyCustomers(); renderMonthlyList(); showToast('تم التحديث من السحابة');
   };
-  root.querySelector('#mcExport').onclick = ()=>{
-    const data = state.monthly.map((m, idx)=>({
-      'م': idx+1, 'اسم العميل': m.name, 'الموبايل': m.phone, 'النوع': m.isContract?'تعاقد':'عادي',
-      'يوم الاستحقاق': m.dueDay||'-', 'الشركة': m.companyName||'-', 'رقم الكارنيه': m.cardNo||'-',
-      'الأدوية': m.items.map(it=>`${it.name} (${it.qty} - ${it.freq})`).join(' | '),
-      'كود الزميل': m.staffCode, 'تاريخ الإضافة': fmtDate(m.createdAt)
+  container.querySelector('#mExport').onclick = ()=>{
+    const data = state.monthly.map((c, idx)=>({
+      'م': idx+1, 'اسم العميل': c.name, 'الموبايل': c.phone, 'النوع': c.isContract?'تعاقد':'نقدي',
+      'الشركة': c.companyName||'-', 'رقم الكرنيه': c.cardNo||'-', 'يوم الاستحقاق': c.dueDay,
+      'الأدوية': c.items.map(i=>`${i.name} (${i.dose})`).join(' | '), 'كود الزميل': c.staffCode
     }));
-    exportToExcel('عملاء_الصرف_الشهري', data);
+    exportToExcel('عملاء_الصرف_الشهرى', data);
   };
   renderMonthlyList();
 }
 
 function renderMonthlyList(){
-  const list = document.getElementById('mcList');
+  const list = document.getElementById('mList');
   if(!list) return;
   const q = state.search.monthly.trim().toLowerCase();
-  const customers = state.monthly.filter(m=>{
-    if(state.filters.monthlyType==='contract' && !m.isContract) return false;
-    if(state.filters.monthlyType==='normal' && m.isContract) return false;
-    if(q && !(m.name.toLowerCase().includes(q) || m.phone.includes(q) || (m.companyName && m.companyName.toLowerCase().includes(q)))) return false;
+  const currentMonthKey = todayInfo().monthKey;
+
+  const items = state.monthly.filter(c=>{
+    if(state.filters.monthlyType==='contract' && !c.isContract) return false;
+    if(state.filters.monthlyType==='normal' && c.isContract) return false;
+    if(q && !(c.name.toLowerCase().includes(q) || (c.companyName && c.companyName.toLowerCase().includes(q)) || c.phone.includes(q))) return false;
     return true;
   });
 
-  if(customers.length===0){ list.innerHTML = `<div class="empty-state">لا توجد عملاء صرف شهري مطابقين</div>`; return; }
+  if(items.length===0){ list.innerHTML = `<div class="empty-state">لا توجد عملاء صرف شهري مطابقة حالياً</div>`; return; }
 
-  list.innerHTML = customers.map((m, idx)=>`
-    <div class="item-card">
-      <div class="top-row">
-        <div>
-          <div class="title">
-            <span>#${idx+1} ${esc(m.name)}</span>
-            <span class="badge ${m.isContract?'green':'grey'}">${m.isContract?'تعاقد ('+esc(m.companyName||'شركة')+')':'صرف عادي'}</span>
+  list.innerHTML = items.map((c, idx)=>{
+    if(!c.cycle || c.cycle.monthKey !== currentMonthKey){
+      c.cycle = { monthKey: currentMonthKey, contacted: false, dispensed: false };
+    }
+    const isDueSoon = c.dueDay <= (todayInfo().day + 3);
+
+    return `
+      <div class="item-card" style="${isDueSoon && !c.cycle.dispensed ? 'border-color:var(--warning);' : ''}">
+        <div class="top-row">
+          <div>
+            <div class="title">
+              <span>#${idx+1} ${esc(c.name)} (${esc(c.phone)})</span>
+              <button class="edit-btn-icon" data-id="${c.id}" title="تعديل العميل">✏️</button>
+            </div>
+            <div class="sub">
+              ${c.isContract ? `🏢 تعاقد: <strong>${esc(c.companyName)}</strong> (كرنيه: ${esc(c.cardNo)})` : '💵 عميل نقدي حر'} 
+              · يوم الاستحقاق: الـ ${c.dueDay} من الشهر
+            </div>
+            <div class="staff-tag">القائم بالإدخال: ${esc(c.staffCode || 'غير محدد')}</div>
           </div>
-          <div class="sub">📞 موبايل: <a href="tel:${esc(m.phone)}" style="color:var(--primary);font-weight:700;">${esc(m.phone)}</a> ${m.isContract?'· الاستحقاق يوم: <strong>'+m.dueDay+'</strong>':''}</div>
-          <div class="staff-tag">القائم بالإدخال: ${esc(m.staffCode || 'غير محدد')}</div>
+          <span class="badge ${c.isContract?'amber':'green'}">${c.isContract?'تعاقد':'نقدي'}</span>
+        </div>
+
+        <ul class="med-list">
+          ${c.items.map(i=>`<li><strong>${esc(i.name)}</strong> - الجرعة: ${esc(i.dose)}</li>`).join('')}
+        </ul>
+
+        ${c.hasCardImage && c.cardImageData ? `
+          <div style="margin-top:8px;">
+            <a href="${c.cardImageData}" target="_blank" style="font-size:12px;color:var(--primary);font-weight:700;text-decoration:underline;">🖼️ عرض صورة الكرنيه المرفقة</a>
+          </div>
+        ` : ''}
+
+        <div style="display:flex;gap:12px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);align-items:center;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin:0;">
+            <input type="checkbox" data-id="${c.id}" data-field="contacted" class="mCycleChk" ${c.cycle.contacted?'checked':''} style="width:18px;height:18px;accent-color:var(--primary);">
+            <span>تم التواصل للتذكير</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;margin:0;">
+            <input type="checkbox" data-id="${c.id}" data-field="dispensed" class="mCycleChk" ${c.cycle.dispensed?'checked':''} style="width:18px;height:18px;accent-color:var(--primary);">
+            <span>تم الصرف لهذا الشهر</span>
+          </label>
+          <a href="https://wa.me/2${c.phone.replace(/\D/g,'')}?text=`+encodeURIComponent(`مرحباً بك يا استاذ/ة ${c.name} 🩺\nنذكرك بموعد صرف أدوية الشهر الحالي (يوم ${c.dueDay} من الشهر).\nنتمنى لك دوام الصحة والعافية!`)" target="_blank" class="btn small secondary" style="text-decoration:none;margin-right:auto;">💬 واتساب للتذكير</a>
         </div>
       </div>
-      <ul class="med-list">
-        ${m.items.map(it=>`<li><b>${esc(it.name)}</b> - كمية: ${esc(it.qty)} (${esc(it.freq)})</li>`).join('')}
-      </ul>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.mCycleChk').forEach(chk=>{
+    chk.onchange = async ()=>{
+      const id = chk.dataset.id;
+      const field = chk.dataset.field;
+      const c = state.monthly.find(x=>x.id===id);
+      if(c){
+        if(!c.cycle) c.cycle = { monthKey: currentMonthKey, contacted:false, dispensed:false };
+        c.cycle[field] = chk.checked;
+        await sbUpdate('monthly_customers', id, buildMonthlyRow(c));
+        await fetchMonthlyCustomers();
+        showToast('تم تحديث حالة دورة الصرف');
+      }
+    };
+  });
+
+  list.querySelectorAll('.edit-btn-icon').forEach(btn=>{
+    btn.onclick = ()=>{
+      const c = state.monthly.find(x=>x.id===btn.dataset.id);
+      if(!c) return;
+      openEditModal('تعديل بيانات العميل الشهري', `
+        <label>اسم العميل</label><input type="text" id="edMName" value="${esc(c.name)}">
+        <label>رقم الموبايل</label><input type="tel" id="edMPhone" value="${esc(c.phone)}">
+        <label>يوم الاستحقاق</label><input type="number" id="edMDue" value="${c.dueDay}">
+        <label>كود الزميل</label><input type="text" id="edMStaff" value="${esc(c.staffCode)}">
+      `, async (modal)=>{
+        c.name = modal.querySelector('#edMName').value.trim();
+        c.phone = modal.querySelector('#edMPhone').value.trim();
+        c.dueDay = Number(modal.querySelector('#edMDue').value) || 1;
+        c.staffCode = modal.querySelector('#edMStaff').value.trim();
+        await sbUpdate('monthly_customers', c.id, buildMonthlyRow(c));
+        await fetchMonthlyCustomers();
+        renderMonthlyList();
+        showToast('تم التعديل بنجاح');
+      });
+    };
+  });
+}
+
+/* TAB 5: قاعدة البيانات والأصناف */
+function mountDatabaseTab(root){
+  root.innerHTML = `
+    <div class="card">
+      <p class="section-title">إضافة / ربط صنف جديد في القاموس الذكي</p>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">قم بتسجيل أرقام الأصناف وأسمائها لكي يتم استدعاؤها تلقائياً عند إدخال رقم الصنف في أي قسم باللوحة.</p>
+      <label>رقم الصنف (Item No)</label><input type="text" id="dbCode" placeholder="مثال: 10234">
+      <label>اسم وصف الصنف (Item Description)</label><input type="text" id="dbDesc" placeholder="اسم الدواء أو الصنف بالكامل">
+      <button class="btn" id="dbSaveBtn">حفظ في القاموس</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <span>قاموس الأصناف المحفوظة محلياً</span>
+        <button class="refresh" id="dbRefresh">⟳ تحديث</button>
+      </div>
+      <div class="searchbar"><input type="search" id="dbSearch" placeholder="ابحث برقم الصنف أو الاسم..."></div>
+      <div id="dbList"></div>
+    </div>
+  `;
+
+  root.querySelector('#dbSaveBtn').onclick = ()=>{
+    const code = document.getElementById('dbCode').value.trim();
+    const desc = document.getElementById('dbDesc').value.trim();
+    if(!code || !desc){ showToast('من فضلك ادخل رقم واسم الصنف'); return; }
+    itemDatabase[code] = desc;
+    localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+    document.getElementById('dbCode').value = '';
+    document.getElementById('dbDesc').value = '';
+    renderDbList();
+    showToast('تم حفظ الصنف في القاموس الذكي');
+  };
+
+  root.querySelector('#dbSearch').oninput = ()=>renderDbList();
+  root.querySelector('#dbRefresh').onclick = ()=>renderDbList();
+  renderDbList();
+}
+
+function renderDbList(){
+  const list = document.getElementById('dbList');
+  if(!list) return;
+  const q = (document.getElementById('dbSearch')?.value || '').trim().toLowerCase();
+  const keys = Object.keys(itemDatabase).filter(k=>{
+    if(!q) return true;
+    return k.toLowerCase().includes(q) || itemDatabase[k].toLowerCase().includes(q);
+  });
+
+  if(keys.length===0){ list.innerHTML = `<div class="empty-state">لا توجد أصناف مسجلة في القاموس حالياً</div>`; return; }
+
+  list.innerHTML = keys.map((k, idx)=>`
+    <div class="item-card" style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-weight:800;font-size:14px;color:var(--primary-dark);">رقم الصنف: ${esc(k)}</div>
+        <div style="font-size:13px;color:var(--text);margin-top:2px;">الاسم: ${esc(itemDatabase[k])}</div>
+      </div>
+      <button class="btn small danger dbDelBtn" data-code="${k}">حذف</button>
     </div>
   `).join('');
+
+  list.querySelectorAll('.dbDelBtn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const code = btn.dataset.code;
+      delete itemDatabase[code];
+      localStorage.setItem('ph_item_database', JSON.stringify(itemDatabase));
+      renderDbList();
+      showToast('تم حذف الصنف من القاموس');
+    };
+  });
 }
 
-/* INITIALIZE APP */
+/* Initialize App on load */
 async function initApp(){
   initNightMode();
-  renderTabsNav();
-  try{
-    const [stock, reservations, monthly] = await Promise.all([
-      fetchStockIssues(), fetchReservations(), fetchMonthlyCustomers()
+  showToast('جاري مزامنة البيانات من السحابة لكافة الشاشات...');
+  try {
+    await Promise.all([
+      fetchStockIssues(),
+      fetchReservations(),
+      fetchMonthlyCustomers()
     ]);
-    state.stock = stock;
-    state.reservations = reservations;
-    state.monthly = monthly;
-    renderActiveTab();
-  }catch(e){
-    renderActiveTab();
+    showToast('تمت المزامنة السحابية بنجاح');
+  } catch(e) {
+    showToast('تعذر الاتصال بالسحابة، يتم استخدام النسخ المخزنة');
   }
+  renderTabsNav();
+  renderActiveTab();
 }
 
-initApp();
+window.onload = initApp;
 </script>
 </body>
 </html>
